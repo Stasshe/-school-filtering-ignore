@@ -1,0 +1,1 @@
+javascript:(function()%20%7B%20%20%20%20%20const%20htmlContent%20=%20document.documentElement.outerHTML;%20%20%20%20%20const%20newTab%20=%20window.open();%20%20%20%20%20newTab.document.open();%20%20%20%20%20newTab.document.write(%60%3Cpre%3E$%7BhtmlContent.replace(/%3C/g,%20'&lt;').replace(/%3E/g,%20'&gt;')%7D%3C/pre%3E%60);%20%20%20%20%20newTab.document.close();%20%7D)();
