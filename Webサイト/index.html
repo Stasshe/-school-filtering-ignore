@@ -105,7 +105,7 @@
   <input type="text" id="urlInput" placeholder="URLを入力 (例: https://example.com/page)">
   <button onclick="clearPlaceholder()">クリア</button>
   <button onclick="fetchPage()">ページを取得</button>
-  <button onclick="openLogWindow()">ログを見る</button>
+  <!--<button onclick="openLogWindow()">ログを見る</button>-->
   <button onclick="openAboutPage()">詳細</button>
   <button onclick="clearHistory()">履歴前削除</button>
   <select id="historySelect" onchange="loadHistoryFromSelect()">
@@ -205,7 +205,12 @@
           return;
       }
       
-      const isSimpleMode = document.getElementById('simpleMode').checked;
+      const ShouldFast = ["qiita", "note","zenn"]
+      if (ShouldFast.includes(extractDomainName(url))) {
+        isSimpleMode = true
+      }else{
+        isSimpleMode = document.getElementById('simpleMode').checked;
+      }
       console.log('fastMode:',isSimpleMode);
 
       // サーバーへのリクエスト
@@ -224,7 +229,7 @@
             const parsedDoc = parser.parseFromString(data.data, 'text/html');
             title = parsedDoc.querySelector('title') ? parsedDoc.querySelector('title').innerText : '無題';
             title = extractDomainName(url) + " :" + title
-            if (title.length > 30) {title = title.substring(0, 30) + "...";} // 30文字以降を切り、末尾に「...」を追加
+            if (title.length > 45) {title = title.substring(0, 42) + "...";} // 30文字以降を切り、末尾に「...」を追加
       
             saveHistory(url, title, data.data);
             displayHistory();
@@ -299,6 +304,8 @@
         fetchPage();
       }
     });
+    
+    /*
     // ログキャプチャ用
     let logWindow = null;
     let logContent = '';
@@ -321,6 +328,7 @@
       logWindow.document.close();
     }
     
+    */
     function openAboutPage() {
       window.open('/description.html', '_blank')
     }
