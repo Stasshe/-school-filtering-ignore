@@ -98,9 +98,9 @@
 </head>
 <body>
   <div style="display:flex; align-items: center;">
-    <p>URLを入力して、指定したページの内容を再現します。Youtube対応済　　　　</p>
+    <p>URLを入力して、指定したページの内容を再現します。Youtube対応済　-開発中-　　　</p>
     <input type="checkbox" id="simpleMode" />
-    <label for="simpleMode">簡易モード</label>
+    <label for="simpleMode">スピード重視</label>
   </div>
   <input type="text" id="urlInput" placeholder="URLを入力 (例: https://example.com/page)">
   <button onclick="clearPlaceholder()">クリア</button>
@@ -128,6 +128,9 @@
     <iframe id="pageIframe"></iframe>
   </div>
   <script>
+    const DB_NAME = 'pageHistoryDB';
+    const DB_VERSION = 1;
+    const STORE_NAME = 'history';
 
     // URLをhttp/https、ドメイン、URLパスに分ける関数
     function splitUrl(url) {
@@ -190,65 +193,103 @@
         window.location.href = youtubeEmbedUrl;
         return;
       }
+      
+      let loaded = false
+      const request = indexedDB.open(DB_NAME, DB_VERSION); // DB名とバージョンを指定してIndexedDBを開く  
+      request.onsuccess = function(event) {
+        const transaction = event.target.result.transaction([STORE_NAME], 'readonly');
+        const objectStore = transaction.objectStore(STORE_NAME);
+        const getRequest = objectStore.getAll(); // 履歴をすべて取得
+        getRequest.onsuccess = function() {
+          const history = getRequest.result;
+          history.forEach((item) => {
+            if (item.url === url) {
+            loadHistory(item.id);
+            loaded = true
+            return;
+            }
+          });
+          
+          if (loaded){
+            console.log('found');
+            return;
+          }else{
 
-      clearIframe();
-      
-      
-      // ローディングアニメーションを表示
-      document.getElementById('loadingOverlay').style.display = 'block';
-      
-      // URLを分割
-      const split = splitUrl(url);
-      if (!split) {
-          alert("無効なURLです。");
-          removeLoad();
-          return;
-      }
-      
-      const ShouldFast = ["qiita", "note","zenn"]
-      if (ShouldFast.includes(extractDomainName(url))) {
-        isSimpleMode = true
-      }else{
-        isSimpleMode = document.getElementById('simpleMode').checked;
-      }
-      console.log('fastMode:',isSimpleMode);
+            clearIframe();
 
-      // サーバーへのリクエスト
-      fetch(`https://roughfts-web-surfing-tool.glitch.me/fetch-page?fastmode=${isSimpleMode}&protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`)
-        .then(response => response.json())
-        .then(data => {
-          if (data.data) {
-            const iframe = document.getElementById('pageIframe');
-            const doc = iframe.contentDocument || iframe.contentWindow.document;
-            doc.open();
-            doc.write(data.data);
-            doc.close();
-            
-            // titleを取得する
-            const parser = new DOMParser();
-            const parsedDoc = parser.parseFromString(data.data, 'text/html');
-            title = parsedDoc.querySelector('title') ? parsedDoc.querySelector('title').innerText : '無題';
-            title = extractDomainName(url) + " :" + title
-            if (title.length > 45) {title = title.substring(0, 42) + "...";} // 30文字以降を切り、末尾に「...」を追加
-      
-            saveHistory(url, title, data.data);
-            displayHistory();
 
-            // iframe内のリンクを監視
-            monitorIframeLinks(); 
-            // ローディングアニメーションを非表示にする
-            removeLoad();
-            fetchMemoryUsage();
-          } else {
-            alert("ページの取得に失敗しました。");
-            removeLoad();
+            // ローディングアニメーションを表示
+            document.getElementById('loadingOverlay').style.display = 'block';
+
+            // URLを分割
+            const split = splitUrl(url);
+            if (!split) {
+                alert("無効なURLです。");
+                removeLoad();
+                return;
+            }
+
+            const ShouldFast = ["qiita", "note","zenn"]
+            if (ShouldFast.includes(extractDomainName(url))) {
+              isSimpleMode = true
+            }else{
+              isSimpleMode = document.getElementById('simpleMode').checked;
+            }
+            console.log('fastMode:',isSimpleMode);
+
+            // サーバーへのリクエスト
+
+            console.log(url,"fetch")
+            fetch(`/fetch-page?fastmode=${isSimpleMode}&protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`)
+              .then(response => response.json())
+              .then(data => {
+                if (data.data) {
+                  const iframe = document.getElementById('pageIframe');
+                  const doc = iframe.contentDocument || iframe.contentWindow.document;
+                  // レスポンスデータを一時的にHTML要素としてパース
+                  const tempDiv = document.createElement('div');
+                  tempDiv.innerHTML = data.data;
+
+                  // <a>タグの target="_blank" を削除
+                  tempDiv.querySelectorAll('a[target="_blank"]').forEach(link => {
+                    link.removeAttribute('target');
+                    link.removeAttribute('rel');
+                    console.log('removed _blank');
+                  });
+                  doc.open();
+                  doc.write(data.data);
+                  doc.close();
+
+                  // titleを取得する
+                  const parser = new DOMParser();
+                  const parsedDoc = parser.parseFromString(data.data, 'text/html');
+                  title = parsedDoc.querySelector('title') ? parsedDoc.querySelector('title').innerText : '無題';
+                  title = extractDomainName(url) + " :" + title
+                  if (title.length > 40) {title = title.substring(0, 40) + "...";} // 30文字以降を切り、末尾に「...」を追加
+
+                  saveHistory(url, title, data.data);
+                  displayHistory();
+
+                  // iframe内のリンクを監視
+                  monitorIframeLinks(); 
+                  // ローディングアニメーションを非表示にする
+                  removeLoad();
+                  fetchMemoryUsage();
+                } else {
+                  alert("ページの取得に失敗しました。");
+                  removeLoad();
+                }
+              })
+              .catch(error => {
+                console.error("Error:", error);
+                alert("エラーが発生しました。");
+                removeLoad();
+              });
           }
-        })
-        .catch(error => {
-          console.error("Error:", error);
-          alert("エラーが発生しました。");
-          removeLoad();
-        });
+        };
+        getRequest.onerror = function() {console.error('履歴の読み込みに失敗しました')};
+      }
+      
     }
     function extractDomainName(url) {
       try {
@@ -273,20 +314,24 @@
       const iframe = document.getElementById('pageIframe');
       const doc = iframe.contentDocument || iframe.contentWindow.document;
       //if (link.classList.contains('exclude'){window.postMessage({ type: 'link-clicked', url: newUrl }, '*');return;})
-
       // クリックされたリンクを親ページに伝える
       doc.querySelectorAll('a').forEach((link) => {
         link.addEventListener('click', (event) => {
           const href = link.getAttribute('href');
+          console.log(href)
           if (href && (href.startsWith('http') || href.startsWith('https'))) {
             event.preventDefault(); // 外部リンクの遷移をキャンセル
+            
             const newUrl = link.href;
             //alert('ページ遷移します');
             console.log('ページ遷移します')
-            void 0;
+            //void 0;
             //なぜお前が必要なんだ。教えてくれしかもこれ以上コメント行増やすとだめ
             window.postMessage({ type: 'link-clicked', url: newUrl }, '*');
+            
           } else if (href && href.startsWith('#')) {
+            return;
+          } else {
             return;
           }
         });
@@ -296,15 +341,44 @@
         console.log('page clicked fetch button')
       })*/
     }
-
+    
+    
     window.addEventListener('message', (event) => {
       if (event.data.type === 'link-clicked') {
         const newUrl = event.data.url;
         document.getElementById('urlInput').value = newUrl;
-        fetchPage();
+        
+        // IndexedDBに保存された履歴を検索
+        const request = indexedDB.open(DB_NAME, DB_VERSION); // DB名とバージョンを指定してIndexedDBを開く
+        
+        request.onsuccess = function(event) {
+          const db = event.target.result;
+          const transaction = db.transaction([STORE_NAME], 'readonly');
+          const objectStore = transaction.objectStore(STORE_NAME);
+          const getRequest = objectStore.getAll(); // 履歴をすべて取得
+          getRequest.onsuccess = function() {
+            const history = getRequest.result;
+            let found = false;
+            // IndexedDBの履歴と新しいURLを照合
+            history.forEach((item) => {
+              //console.log("have?",found,index,item)
+              if (item.url === newUrl) {
+                found = true;
+                loadHistory(item.id); // URLが一致した場合は履歴を読み込む
+              }
+            });
+            // URLが一致しなければfetchPageを呼び出す
+            if (!found) {
+              fetchPage(); // 従来通りfetchPageを実行
+            }
+          };
+          getRequest.onerror = function() {
+            console.error('履歴の読み込みに失敗しました');
+            fetchPage(); // IndexedDB読み込みに失敗した場合は従来通りfetchPageを実行
+          };
+        };
       }
     });
-    
     /*
     // ログキャプチャ用
     let logWindow = null;
@@ -329,6 +403,22 @@
     }
     
     */
+    
+        // inputボックスにフォーカスがある場合にEnterキーが押されたときにfetchPage()を呼び出す
+    const inputBox = document.getElementById('urlInput'); // idが"urlInput"のinputボックスを取得
+    
+    inputBox.addEventListener('keydown', (event) => {
+      // Enterキーが押された時の処理
+      if (event.key === 'Enter') {
+        event.preventDefault(); // Enterキーのデフォルト動作（フォーム送信など）をキャンセル
+        fetchPage(); // fetchPage()を呼び出す
+        const focusedElement = document.activeElement;
+        if (focusedElement && (focusedElement.tagName === 'INPUT' || focusedElement.tagName === 'SELECT')) {
+          focusedElement.blur();  // フォーカスを外す
+        }
+      }
+    });
+    
     function openAboutPage() {
       window.open('/description.html', '_blank')
     }
@@ -349,80 +439,6 @@
       }
     }
     
-    
-      // 履歴の管理と保存
-    function saveHistory(url, title, iframeContent) {
-      let history = JSON.parse(localStorage.getItem('pageHistory')) || [];
-    
-      // 履歴に追加
-      try {
-        history.push({ url, title, iframeContent });
-
-        // 履歴の数を制限（最大12件）
-        if (history.length > 12) {
-          history.shift();  // 最も古い履歴を削除
-        }
-        localStorage.setItem('pageHistory', JSON.stringify(history));
-      }catch (error) {
-        alert('サイトが重かっため、履歴の保存限界になりました');
-        console.error('Too heavy',error);
-      }
-      
-    }
-
-    // 履歴をプルダウンリストに表示
-    function displayHistory() {
-      const history = JSON.parse(localStorage.getItem('pageHistory')) || [];
-      const historySelect = document.getElementById('historySelect');
-  
-      // プルダウンリストを初期化
-      historySelect.innerHTML = '<option value="">履歴を選択してください</option>';  // 初期選択
-      // 履歴をリストとして表示
-      history.forEach((item, index) => {
-        const option = document.createElement('option');
-        option.value = index;  // 履歴のインデックスをvalueに設定
-        option.textContent = item.title;  // 履歴タイトルを表示
-        historySelect.appendChild(option);
-      });
-    }
-
-    // プルダウンから履歴を選択してロード
-    function loadHistoryFromSelect() {
-      const historySelect = document.getElementById('historySelect');
-      const selectedIndex = historySelect.value;
-      if (selectedIndex === "") return;  // 何も選ばれていない場合は処理しない
-      const history = JSON.parse(localStorage.getItem('pageHistory')) || [];
-      const selectedHistory = history[selectedIndex];
-      // 取得した履歴をiframeに読み込む
-      const urlInput = document.getElementById('urlInput');
-      urlInput.value = selectedHistory.url;
-      const iframe = document.getElementById('pageIframe');
-      // iframe.src = selectedHistory.url;
-      
-      const doc = iframe.contentDocument || iframe.contentWindow.document;
-      doc.open();
-      doc.write(selectedHistory.iframeContent);
-      doc.close();
-      monitorIframeLinks(); 
-      /*
-      iframe.onload = () => {
-        iframe.contentDocument.documentElement.innerHTML = selectedHistory.iframeContent;
-      };*/
-    }
-    // iframeのソースコードを取得して履歴に保存
-    function getIframeContent(iframe) {
-      return iframe.contentDocument.documentElement.outerHTML;
-    }  
-
-    // ページロード時に履歴を表示
-    displayHistory();
-    function clearHistory() {
-      localStorage.removeItem('pageHistory');
-      displayHistory();
-      alert('履歴が削除されました。')
-    }
-    
-    
     // body全体にクリックイベントを追加
     document.body.addEventListener('click', function(event) {
     // クリックされたのがinputまたはselectの場合は何もしない
@@ -437,11 +453,7 @@
     });
   </script>
   <script>
-    const DB_NAME = 'pageHistoryDB';
-    const DB_VERSION = 1;
-    const STORE_NAME = 'history';
     let db;
-  
     // IndexedDBの初期化
     function initDB() {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -463,27 +475,19 @@
         }
       };
     }
-  
-    // 履歴を保存
+
     function saveHistory(url, title, iframeContent) {
       const transaction = db.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-  
       // iframeContentを圧縮
       const compressedContent = pako.gzip(iframeContent, { to: 'string' });
-  
       const historyItem = { url, title, iframeContent: compressedContent };
-  
       store.add(historyItem);
-  
       transaction.oncomplete = function() {
         console.log('履歴が保存されました');
         displayHistory();
       };
-  
-      transaction.onerror = function() {
-        console.error('履歴の保存エラー');
-      };
+      transaction.onerror = function() {console.error('履歴の保存エラー');};
     }
   
     // 履歴をプルダウンリストに表示
@@ -491,12 +495,10 @@
       const transaction = db.transaction([STORE_NAME], 'readonly');
       const store = transaction.objectStore(STORE_NAME);
       const request = store.getAll();
-  
       request.onsuccess = function(event) {
         const history = event.target.result;
         const historySelect = document.getElementById('historySelect');
         historySelect.innerHTML = '<option value="">履歴を選択してください</option>';
-  
         history.forEach((item, index) => {
           const option = document.createElement('option');
           option.value = item.id;  // 履歴のIDをvalueに設定
@@ -504,16 +506,14 @@
           historySelect.appendChild(option);
         });
       };
-  
       request.onerror = function() {
         console.error('履歴の取得エラー');
       };
     }
   
-    // プルダウンから履歴を選択してロード
-    function loadHistoryFromSelect() {
-      const historySelect = document.getElementById('historySelect');
-      const selectedIndex = historySelect.value;
+    
+    
+    function loadHistory(selectedIndex) {
       if (selectedIndex === "") return;
   
       const transaction = db.transaction([STORE_NAME], 'readonly');
@@ -539,6 +539,12 @@
       request.onerror = function() {
         console.error('履歴のロードエラー');
       };
+    }
+    // プルダウンから履歴を選択してロード
+    function loadHistoryFromSelect() {
+      const historySelect = document.getElementById('historySelect');
+      const selectedIndex = historySelect.value;
+      loadHistory(selectedIndex);
     }
   
     // iframeのソースコードを取得して履歴に保存
