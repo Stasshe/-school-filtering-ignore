@@ -1,12 +1,12 @@
 const express = require('express');
 const axios = require('axios');
-const cors = require('cors');
+//const cors = require('cors');
 const { JSDOM } = require('jsdom'); // HTML操作のためのライブラリ
 const app = express();
 const path = require('path');
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+//app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
 let currentUrl = ''; // 現在のURLを保持
@@ -47,7 +47,6 @@ app.get('/fetch-page', async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST'); // 許可するHTTPメソッド
   res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept'); // 許可するヘッダー
 */
-
   try {
     console.log(`Fetching URL: ${url}`);
     const response = await axios.get(url);
@@ -72,7 +71,7 @@ app.get('/fetch-page', async (req, res) => {
     });
 
     // リソースの置き換え
-    if (!fastmode) {
+    if (fastmode === 'false') {
       await replaceResources(document, domain);
     }
     
