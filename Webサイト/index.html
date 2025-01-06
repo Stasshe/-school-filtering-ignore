@@ -102,7 +102,7 @@
     <input type="checkbox" id="simpleMode" />
     <label for="simpleMode">スピード重視</label>
   </div>
-  <input type="text" id="urlInput" placeholder="URLを入力 (例: https://example.com/page)">
+  <input type="text" id="urlInput" placeholder="URL または 検索語句 を入力してエンターを押す（ページを取得でも可能）">
   <button onclick="clearPlaceholder()">クリア</button>
   <button onclick="fetchPage()">ページを取得</button>
   <!--<button onclick="openLogWindow()">ログを見る</button>-->
@@ -122,6 +122,7 @@
     <div class="memory-item" id="heapTotal">Heap Total: 0 MB</div>
     <div class="memory-item" id="heapUsed">Heap Used: 0 MB</div>
     <div class="memory-item" id="external">External: 0 MB</div>
+    <div class="memory-item" id="access">Access: 0 time</div>
   </div>
 
   <div id="iframeContainer">
@@ -172,15 +173,57 @@
       doc.write('');  // 空の内容を設定
       doc.close();
     }
+    /*
+    function isValidUrl(urlString) {
+      try {
+        const pattern = new RegExp('^(https?:\\/\\/)?'+ // protocol
+        '((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.?)+[a-z]{2,}|'+ // domain name
+        '((\\d{1,3}\\.){3}\\d{1,3}))'+ // OR ip (v4) address
+        '(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*'+ // port and path
+        '(\\?[;&a-z\\d%_.~+=-]*)?'+ // query string
+        '(\\#[-a-z\\d_]*)?$','i'); // fragment locator
+        return !!pattern.test(urlString);
+      }catch(_){
+        return false
+      }
+      
+    }*/
+    function isValidUrl(urlString) {
+      try {
+        new URL(urlString);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    
+    
+    
 
     // ページを取得してiframeに表示する関数
     function fetchPage() {
       fetchMemoryUsage();
-      const url = document.getElementById('urlInput').value;
+      url = document.getElementById('urlInput').value;
       if (!url) {
           alert("URLを入力してください。");
           return;
       }
+      
+      if (!isValidUrl(url)){
+        url = `https://www.google.com/search?q=${encodeURIComponent(url)}&ie=UTF-8&oe=UTF-8&hl=ja-jp&client=safari`;
+      }
+      
+      if (url.startsWith('https://www.google.com/url?q=')) {
+        // URLオブジェクトを作成してクエリパラメータを取得
+        const urlObj = new URL(url);
+        const searchParams = urlObj.searchParams;
+        const extractedUrl = searchParams.get('q');
+
+        // extractedUrlをurl変数に設定
+        url = extractedUrl;
+      }
+      
       if (isBlockedDomain(url)) {
         alert('X(Twitter)、Instagramは明示的にスクレイピングを禁止しているためページを取得しません');
         clearPlaceholder()
@@ -434,6 +477,7 @@
         document.getElementById('heapTotal').textContent = `Heap Total: ${data.memoryUsage.heapTotal} MB`;
         document.getElementById('heapUsed').textContent = `Heap Used: ${data.memoryUsage.heapUsed} MB`;
         document.getElementById('external').textContent = `External: ${data.memoryUsage.external} MB`;
+        document.getElementById('access').textContent = `Access: ${data.memoryUsage.access} times`;
       } catch (error) {
         console.error('Error fetching memory usage:', error);
       }
@@ -570,6 +614,7 @@
   
     // DBを初期化
     initDB();
+    fetchMemoryUsage();
   </script>
 </body>
 </html>
