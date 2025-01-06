@@ -1,620 +1,238 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Roughfts_サイトViewer</title>
-  <link rel="icon" href="https://cdn.glitch.global/36478626-a9ef-40e3-97c4-1263e38275ac/Favicon512.png?v=1735652344246" type="image/png">
-  <link rel="shortcut icon" href="https://cdn.glitch.global/36478626-a9ef-40e3-97c4-1263e38275ac/favicon64_icon.ico?v=1735650581144" type="image/x-icon">
-  <link rel="apple-touch-icon" href="https://cdn.glitch.global/36478626-a9ef-40e3-97c4-1263e38275ac/Icon.png?v=1735649920596">
-  <script src="//cdn.jsdelivr.net/npm/eruda"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.0.4/pako.min.js"></script>
-	<script>eruda.init();</script>
+const express = require('express');
+const axios = require('axios');
+//const cors = require('cors');
+const { JSDOM } = require('jsdom'); // HTML操作のためのライブラリ
+//const {saveRequestHistory, updatePageAccessCount} = require('./firebase')
+const app = express();
+const path = require('path');
+const PORT = process.env.PORT || 3000;
 
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 5px;
-    }
-    p,checkbox {
-      margin: 0;
-      padding-top: 0;
-      font-size: 18px;
-    }
-    button, select, checkbox{
-      padding: 10px;
-      margin-top: 10px;
-      font-size: 16px;
-    }
-    input[type="text"] {
-      width: 98%;
-      height: 32px;
-      font-size: 16px;
-    }
-    #iframeContainer {
-      margin-top: 10px;
-      width: 100%;
-      height: 600px;
-      border: 1px solid #ddd;
-    }
-    iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
-    #loadingOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background-color: rgba(255, 255, 255, 0.8);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 9999;
-    }
-    .loader {
-      width: 65px;
-      aspect-ratio: 1;
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 9999;
-    }
-    .loader:before,
-    .loader:after {
-      content: "";
-      position: absolute;
-      border-radius: 50px;
-      box-shadow: 0 0 0 3px inset #000000;
-      animation: l4 2.5s infinite;
-    }
-    .loader:after {
-      animation-delay: -1.25s;
-    }
-    @keyframes l4 {
-      0% { inset: 0 35px 35px 0; }
-      12.5% { inset: 0 35px 0 0; }
-      25% { inset: 35px 35px 0 0; }
-      37.5% { inset: 35px 0 0 0; }
-      50% { inset: 35px 0 0 35px; }
-      62.5% { inset: 0 0 0 35px; }
-      75% { inset: 0 0 35px 35px; }
-      87.5% { inset: 0 0 35px 0; }
-      100% { inset: 0 35px 35px 0; }
-    }
-    #memory-info {
-      display: flex;
-      flex-wrap: wrap;
-      margin-top: 10px;
-    }
-    .memory-item {
-      padding: 5px;
-      font-size: 14px;
-    }
-  </style>
-</head>
-<body>
-  <div style="display:flex; align-items: center;">
-    <p>URLを入力して、指定したページの内容を再現します。Youtube対応済　-開発中-　　　</p>
-    <input type="checkbox" id="simpleMode" />
-    <label for="simpleMode">スピード重視</label>
-  </div>
-  <input type="text" id="urlInput" placeholder="URL または 検索語句 を入力してエンターを押す（ページを取得でも可能）">
-  <button onclick="clearPlaceholder()">クリア</button>
-  <button onclick="fetchPage()">ページを取得</button>
-  <!--<button onclick="openLogWindow()">ログを見る</button>-->
-  <button onclick="openAboutPage()">詳細</button>
-  <button onclick="clearHistory()">履歴全削除</button>
-  <select id="historySelect" onchange="loadHistoryFromSelect()">
-    <option value="">履歴を選択してください</option>
-  </select>
-  <button onclick="location.href='https://kaito.click/4stepS/4step2S/#google_vignette'">先生</button>
-  <div id="loadingOverlay" style="display: none;">
-    <div class="loader"></div>
-  </div>
-  
-  <div id="memory-info">
-    <div>メモリ使用量</div>
-    <div class="memory-item" id="rss">RSS: 0 MB</div>
-    <div class="memory-item" id="heapTotal">Heap Total: 0 MB</div>
-    <div class="memory-item" id="heapUsed">Heap Used: 0 MB</div>
-    <div class="memory-item" id="external">External: 0 MB</div>
-    <div class="memory-item" id="access">Access: 0 time</div>
-  </div>
+//app.use(cors());
+app.use(express.static(path.join(__dirname, 'public')));
 
-  <div id="iframeContainer">
-    <iframe id="pageIframe"></iframe>
-  </div>
-  <script>
-    const DB_NAME = 'pageHistoryDB';
-    const DB_VERSION = 1;
-    const STORE_NAME = 'history';
+let currentUrl = ''; // 現在のURLを保持
+const cache = new Map(); // キャッシュ用のMap
+const MAX_CACHE_SIZE = 40; // キャッシュの最大数
 
-    // URLをhttp/https、ドメイン、URLパスに分ける関数
-    function splitUrl(url) {
-      const urlPattern = /^(https?):\/\/([^\/]+)(\/.*)?(\?.*)?$/;
-      const matches = url.match(urlPattern);
-      return matches ? {
-        protocol: matches[1],
-        domain: matches[2],
-        path: matches[3] || '/',
-        query: matches[4] || ''
-      } : null;
-    }
+// キャッシュを追加する関数
+function addToCache(url, html) {
+  if (cache.size >= MAX_CACHE_SIZE) {
+    const oldestKey = cache.keys().next().value;
+    cache.delete(oldestKey); // 最古のキャッシュを削除
+  }
+  cache.set(url, html);
+}
 
-    function clearPlaceholder() {
-      const urlInput = document.getElementById('urlInput');
-      urlInput.value = ''; // 入力フィールドを空にする
-      clearIframe();
-    }
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/index.html'); // index.htmlを返す
+});
 
-    function removeLoad() {
-      document.getElementById('loadingOverlay').style.display = 'none';
-    }
+app.get('/fetch-page', async (req, res) => {
+  const {fastmode, protocol, domain, path, query } = req.query;
 
-    // YouTubeのリンクかどうかを判定する関数
-    function isYouTubeUrl(url) {
-      return /youtube\.com|youtu\.be/.test(url);
-    }
-    
-    function isBlockedDomain(url) {
-      const blockedDomains = ['twitter.com', 'instagram.com','x.com'];
-      const urlObj = new URL(url);
-      return blockedDomains.some(domain => urlObj.hostname.includes(domain))
-    }
-    
-    function clearIframe() {
-      const iframe = document.getElementById('pageIframe');
-      const doc = iframe.contentDocument || iframe.contentWindow.document;
-      doc.open();
-      doc.write('');  // 空の内容を設定
-      doc.close();
-    }
-    /*
-    function isValidUrl(urlString) {
-      try {
-        const pattern = new RegExp('^(https?:\\/\\/)?'+ // protocol
-        '((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.?)+[a-z]{2,}|'+ // domain name
-        '((\\d{1,3}\\.){3}\\d{1,3}))'+ // OR ip (v4) address
-        '(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*'+ // port and path
-        '(\\?[;&a-z\\d%_.~+=-]*)?'+ // query string
-        '(\\#[-a-z\\d_]*)?$','i'); // fragment locator
-        return !!pattern.test(urlString);
-      }catch(_){
-        return false
-      }
-      
-    }*/
-    function isValidUrl(urlString) {
-      try {
-        new URL(urlString);
-        return true;
-      } catch (_) {
-        return false;
-      }
-    }
+  if (!protocol || !domain) {
+    return res.status(400).json({ error: 'Protocol and domain are required' });
+  }
 
-    
-    
-    
+  const url = `${protocol}://${domain}${path || ''}${query || ''}`;
+  currentUrl = url;
 
-    // ページを取得してiframeに表示する関数
-    function fetchPage() {
-      fetchMemoryUsage();
-      url = document.getElementById('urlInput').value;
-      if (!url) {
-          alert("URLを入力してください。");
-          return;
-      }
-      
-      if (!isValidUrl(url)){
-        url = `https://www.google.com/search?q=${encodeURIComponent(url)}&ie=UTF-8&oe=UTF-8&hl=ja-jp&client=safari`;
-      }
-      
-      if (url.startsWith('https://www.google.com/url?q=')) {
-        // URLオブジェクトを作成してクエリパラメータを取得
-        const urlObj = new URL(url);
-        const searchParams = urlObj.searchParams;
-        const extractedUrl = searchParams.get('q');
+  // キャッシュを確認
+  if (cache.has(url)) {
+    console.log(`Cache hit for ${url}`);
+    return res.json({ data: cache.get(url) });
+  }
+    // CORSヘッダーを追加
+  /*
+  res.setHeader('Access-Control-Allow-Origin', '*');  // 全てのドメインからアクセス許可
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST'); // 許可するHTTPメソッド
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept'); // 許可するヘッダー
+*/
+  try {
+    console.log(`Fetching URL: ${url}`);
+    const response = await axios.get(url);
 
-        // extractedUrlをurl変数に設定
-        url = extractedUrl;
-      }
-      
-      if (isBlockedDomain(url)) {
-        alert('X(Twitter)、Instagramは明示的にスクレイピングを禁止しているためページを取得しません');
-        clearPlaceholder()
-        return;
-      }
+    const dom = new JSDOM(response.data);
+    const document = dom.window.document;
 
-      if (isYouTubeUrl(url)) {
-        // YouTubeのリンクの場合はno-cookie埋め込みURLを使ってページ全体を開く
-        const youtubeEmbedUrl = url.replace("youtube.com", "youtube-nocookie.com").replace("watch?v=", "embed/");
-        window.location.href = youtubeEmbedUrl;
-        return;
-      }
-      
-      let loaded = false
-      const request = indexedDB.open(DB_NAME, DB_VERSION); // DB名とバージョンを指定してIndexedDBを開く  
-      request.onsuccess = function(event) {
-        const transaction = event.target.result.transaction([STORE_NAME], 'readonly');
-        const objectStore = transaction.objectStore(STORE_NAME);
-        const getRequest = objectStore.getAll(); // 履歴をすべて取得
-        getRequest.onsuccess = function() {
-          const history = getRequest.result;
-          history.forEach((item) => {
-            if (item.url === url) {
-            loadHistory(item.id);
-            loaded = true
-            return;
-            }
-          });
-          
-          if (loaded){
-            console.log('found');
-            return;
-          }else{
+    const baseTag = document.createElement('base');
+    baseTag.href = currentUrl; // 現在のURLを設定
+    document.head.appendChild(baseTag);
 
-            clearIframe();
+    const baseUrl = new URL(url);
 
+    // すべてのリンクを絶対参照に変換
+    document.querySelectorAll('a[href], img[src], link[href], script[src]').forEach((element) => {
+      const attribute = element.hasAttribute('href') ? 'href' : 'src';
+      const link = element.getAttribute(attribute);
 
-            // ローディングアニメーションを表示
-            document.getElementById('loadingOverlay').style.display = 'block';
-
-            // URLを分割
-            const split = splitUrl(url);
-            if (!split) {
-                alert("無効なURLです。");
-                removeLoad();
-                return;
-            }
-
-            const ShouldFast = ["qiita", "note","zenn"]
-            if (ShouldFast.includes(extractDomainName(url))) {
-              isSimpleMode = true
-            }else{
-              isSimpleMode = document.getElementById('simpleMode').checked;
-            }
-            console.log('fastMode:',isSimpleMode);
-
-            // サーバーへのリクエスト
-
-            console.log(url,"fetch")
-            fetch(`/fetch-page?fastmode=${isSimpleMode}&protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`)
-              .then(response => response.json())
-              .then(data => {
-                if (data.data) {
-                  const iframe = document.getElementById('pageIframe');
-                  const doc = iframe.contentDocument || iframe.contentWindow.document;
-                  // レスポンスデータを一時的にHTML要素としてパース
-                  const tempDiv = document.createElement('div');
-                  tempDiv.innerHTML = data.data;
-
-                  // <a>タグの target="_blank" を削除
-                  tempDiv.querySelectorAll('a[target="_blank"]').forEach(link => {
-                    link.removeAttribute('target');
-                    link.removeAttribute('rel');
-                    console.log('removed _blank');
-                  });
-                  doc.open();
-                  doc.write(data.data);
-                  doc.close();
-
-                  // titleを取得する
-                  const parser = new DOMParser();
-                  const parsedDoc = parser.parseFromString(data.data, 'text/html');
-                  title = parsedDoc.querySelector('title') ? parsedDoc.querySelector('title').innerText : '無題';
-                  title = extractDomainName(url) + " :" + title
-                  if (title.length > 40) {title = title.substring(0, 40) + "...";} // 30文字以降を切り、末尾に「...」を追加
-
-                  saveHistory(url, title, data.data);
-                  displayHistory();
-
-                  // iframe内のリンクを監視
-                  monitorIframeLinks(); 
-                  // ローディングアニメーションを非表示にする
-                  removeLoad();
-                  fetchMemoryUsage();
-                } else {
-                  alert("ページの取得に失敗しました。");
-                  removeLoad();
-                }
-              })
-              .catch(error => {
-                console.error("Error:", error);
-                alert("エラーが発生しました。");
-                removeLoad();
-              });
-          }
-        };
-        getRequest.onerror = function() {console.error('履歴の読み込みに失敗しました')};
-      }
-      
-    }
-    function extractDomainName(url) {
-      try {
-        // URLオブジェクトでドメイン部分を抽出
-        const hostname = new URL(url).hostname;
-        // ホスト名を`.`で分割し、最初の部分を取得
-        const domainParts = hostname.split('.');
-        let domainName = domainParts[0];
-        // サブドメイン（例: www, mなど）があればスキップ
-        if (domainName === "www" || domainName === "m") {
-          domainName = domainParts[1];
-        }
-        return domainName;
-      } catch (error) {
-        console.error('Invalid URL:', url, error);
-        return null;
-      }
-    }
-    
-    // iframe内のリンクを監視してクリックを処理する
-    function monitorIframeLinks() {
-      const iframe = document.getElementById('pageIframe');
-      const doc = iframe.contentDocument || iframe.contentWindow.document;
-      //if (link.classList.contains('exclude'){window.postMessage({ type: 'link-clicked', url: newUrl }, '*');return;})
-      // クリックされたリンクを親ページに伝える
-      doc.querySelectorAll('a').forEach((link) => {
-        link.addEventListener('click', (event) => {
-          const href = link.getAttribute('href');
-          console.log(href)
-          if (href && (href.startsWith('http') || href.startsWith('https'))) {
-            event.preventDefault(); // 外部リンクの遷移をキャンセル
-            
-            const newUrl = link.href;
-            //alert('ページ遷移します');
-            console.log('ページ遷移します')
-            //void 0;
-            //なぜお前が必要なんだ。教えてくれしかもこれ以上コメント行増やすとだめ
-            window.postMessage({ type: 'link-clicked', url: newUrl }, '*');
-            
-          } else if (href && href.startsWith('#')) {
-            return;
-          } else {
-            return;
-          }
-        });
-      });
-      /*
-      document.querySelector('button').addEventListener('click', () => {
-        console.log('page clicked fetch button')
-      })*/
-    }
-    
-    
-    window.addEventListener('message', (event) => {
-      if (event.data.type === 'link-clicked') {
-        const newUrl = event.data.url;
-        document.getElementById('urlInput').value = newUrl;
-        
-        // IndexedDBに保存された履歴を検索
-        const request = indexedDB.open(DB_NAME, DB_VERSION); // DB名とバージョンを指定してIndexedDBを開く
-        
-        request.onsuccess = function(event) {
-          const db = event.target.result;
-          const transaction = db.transaction([STORE_NAME], 'readonly');
-          const objectStore = transaction.objectStore(STORE_NAME);
-          const getRequest = objectStore.getAll(); // 履歴をすべて取得
-          getRequest.onsuccess = function() {
-            const history = getRequest.result;
-            let found = false;
-            // IndexedDBの履歴と新しいURLを照合
-            history.forEach((item) => {
-              //console.log("have?",found,index,item)
-              if (item.url === newUrl) {
-                found = true;
-                loadHistory(item.id); // URLが一致した場合は履歴を読み込む
-              }
-            });
-            // URLが一致しなければfetchPageを呼び出す
-            if (!found) {
-              fetchPage(); // 従来通りfetchPageを実行
-            }
-          };
-          getRequest.onerror = function() {
-            console.error('履歴の読み込みに失敗しました');
-            fetchPage(); // IndexedDB読み込みに失敗した場合は従来通りfetchPageを実行
-          };
-        };
+      if (link && !link.startsWith('http') && !link.startsWith('//')) {
+        element.setAttribute(attribute, new URL(link, baseUrl).href);
       }
     });
-    /*
-    // ログキャプチャ用
-    let logWindow = null;
-    let logContent = '';
-    const iframe = document.getElementById('pageIframe');
-    const iframeWindow = iframe.contentWindow;
 
-    const originalLog = iframeWindow.console.log;
-    iframeWindow.console.log = function(...args) {
-      logContent += args.join(' ') + '\n';
-      originalLog.apply(console, args);
-    };
-
-    // ログ表示ウィンドウを開く
-    function openLogWindow() {
-      if (!logWindow || logWindow.closed) {
-        logWindow = window.open('about:blank', '_blank', 'width=600,height=400');
-      }
-      logWindow.document.open();
-      logWindow.document.write('<pre>' + logContent + '</pre>');
-      logWindow.document.close();
+    // リソースの置き換え
+    if (fastmode === 'false') {
+      await replaceResources(document, domain);
     }
     
+
+    const html = document.documentElement.outerHTML;
+
+    addToCache(url, html); // キャッシュに追加
+
+    res.json({ data: html });
+    
+    const ip =
+      req.headers['x-forwarded-for'] || // プロキシを通している場合
+      req.connection.remoteAddress || // クライアントのIPアドレス
+      req.socket.remoteAddress ||
+      req.connection.socket.remoteAddress;
+    const ipArray = ip.split(',');
+    const ipAddress = ipArray.find(ip => /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(ip));
+    await update(currentUrl, document.title,ipAddress);
+    //await updatePageAccessCount();
+    //await saveRequestHistory(req,currentUrl);
+//    await updatePageAccessCount();
+    
+  } catch (error) {
+    console.error('Error fetching page:', error.message);
+    res.status(500).json({ error: 'Failed to fetch page' });
+  }
+});
+
+// リソースの置き換え関数
+async function replaceResources(document, domain) {
+  const cssLinks = document.querySelectorAll('link[rel="stylesheet"]');
+  for (const cssLink of cssLinks) {
+    const cssHref = cssLink.href;
+    if (cssHref.includes(domain)) {
+      try {
+        const cssResponse = await axios.get(cssHref);
+        const styleTag = document.createElement('style');
+        styleTag.textContent = cssResponse.data;
+        cssLink.replaceWith(styleTag);
+      } catch (error) {
+        console.error(`Error fetching CSS: ${cssHref}`, error.message);
+      }
+    }
+  }
+
+  const scripts = document.querySelectorAll('script[src]');
+  for (const script of scripts) {
+    const scriptSrc = script.src;
+    if (scriptSrc.includes(domain)) {
+      try {
+        const scriptResponse = await axios.get(scriptSrc);
+        const newScript = document.createElement('script');
+        newScript.textContent = scriptResponse.data;
+        script.replaceWith(newScript);
+      } catch (error) {
+        console.error(`Error fetching JavaScript: ${scriptSrc}`, error.message);
+      }
+    }
+  }
+
+  const images = document.querySelectorAll('img[src]');
+  for (const img of images) {
+    const imgSrc = img.src;
+    if (imgSrc.includes(domain)) {
+      try {
+        const imgResponse = await axios.get(imgSrc, { responseType: 'arraybuffer' });
+        const base64 = Buffer.from(imgResponse.data, 'binary').toString('base64');
+        const mimeType = imgResponse.headers['content-type'];
+        img.setAttribute('src', `data:${mimeType};base64,${base64}`);
+      } catch (error) {
+        console.error(`Error fetching image: ${imgSrc}`, error.message);
+      }
+    }
+  }
+
+  const phpLinks = document.querySelectorAll('a[href]');
+  for (const link of phpLinks) {
+    const href = link.href;
+    if (href.includes(domain) && href.endsWith('.php')) {
+      try {
+        const phpResponse = await axios.get(href);
+        link.setAttribute('data-content', phpResponse.data);
+      } catch (error) {
+        console.error(`Error fetching PHP resource: ${href}`, error.message);
+      }
+    }
+  }
+}
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
+
+const FIREBASE_URL = "https://edu-open-4step-default-rtdb.firebaseio.com";
+const fetch = require('node-fetch');
+
+app.get('/resource-usage', async(req, res) => {
+  const accessResponse = await fetch(`${FIREBASE_URL}/accessCount.json`);
+  const accessCount = (await accessResponse.json()) || 0;
+  const memoryUsage = process.memoryUsage();
+  const memoryInfo = {
+    rss: (memoryUsage.rss / 1024 / 1024).toFixed(2), // Resident Set Size
+    heapTotal: (memoryUsage.heapTotal / 1024 / 1024).toFixed(2), // Total heap
+    heapUsed: (memoryUsage.heapUsed / 1024 / 1024).toFixed(2), // Used heap
+    external: (memoryUsage.external / 1024 / 1024).toFixed(2), // External memory
+    access: accessCount
+  };
+
+  res.json({ memoryUsage: memoryInfo });
+});
+
+
+
+app.get('/sleep_time',(req,res) => {
+  console.log(req);
+  res.json({ sleep_time: Date.now() });
+});
+
+
+
+// リクエスト履歴とアクセス数を更新する関数
+async function update(url, title,ipAddress) {
+  try {
+    // リクエスト履歴を取得
+    const historyResponse = await fetch(`${FIREBASE_URL}/requestHistory.json`);
+    const historyData = await historyResponse.json();
+
+//    let history = historyData || [];
+    let history = historyData ? Object.values(historyData) : [];
+    if (history.length >= 200) {
+      history.shift(); // 最大200件を超えた場合、最も古い履歴を削除
+    }
+
+    // 新しい履歴を追加
+    const timestamp_now = new Date().toISOString()
+    history.push({ url, title,ipAddress,timestamp: timestamp_now });
+    /*
+    await fetch(`${FIREBASE_URL}/requestHistory.json`, {
+      method: "DELETE",
+    });
     */
-    
-        // inputボックスにフォーカスがある場合にEnterキーが押されたときにfetchPage()を呼び出す
-    const inputBox = document.getElementById('urlInput'); // idが"urlInput"のinputボックスを取得
-    
-    inputBox.addEventListener('keydown', (event) => {
-      // Enterキーが押された時の処理
-      if (event.key === 'Enter') {
-        event.preventDefault(); // Enterキーのデフォルト動作（フォーム送信など）をキャンセル
-        fetchPage(); // fetchPage()を呼び出す
-        const focusedElement = document.activeElement;
-        if (focusedElement && (focusedElement.tagName === 'INPUT' || focusedElement.tagName === 'SELECT')) {
-          focusedElement.blur();  // フォーカスを外す
-        }
-      }
+    // リクエスト履歴を保存
+    await fetch(`${FIREBASE_URL}/requestHistory.json`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(history)
     });
-    
-    function openAboutPage() {
-      window.open('/description.html', '_blank')
-    }
-    
-    
-    async function fetchMemoryUsage() {
-      try {
-        const response = await fetch('/resource-usage');
-        const data = await response.json();
-        
-        // メモリ情報をHTMLに反映
-        document.getElementById('rss').textContent = `RSS: ${data.memoryUsage.rss} MB`;
-        document.getElementById('heapTotal').textContent = `Heap Total: ${data.memoryUsage.heapTotal} MB`;
-        document.getElementById('heapUsed').textContent = `Heap Used: ${data.memoryUsage.heapUsed} MB`;
-        document.getElementById('external').textContent = `External: ${data.memoryUsage.external} MB`;
-        document.getElementById('access').textContent = `Access: ${data.memoryUsage.access} times`;
-      } catch (error) {
-        console.error('Error fetching memory usage:', error);
-      }
-    }
-    
-    // body全体にクリックイベントを追加
-    document.body.addEventListener('click', function(event) {
-    // クリックされたのがinputまたはselectの場合は何もしない
-      const isInput = event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT'; 
-      // inputやselectがクリックされていなければ、フォーカスを外す
-      if (!isInput) {
-        const focusedElement = document.activeElement;
-        if (focusedElement && (focusedElement.tagName === 'INPUT' || focusedElement.tagName === 'SELECT')) {
-          focusedElement.blur();  // フォーカスを外す
-        }
-      }
-    });
-  </script>
-  <script>
-    let db;
-    // IndexedDBの初期化
-    function initDB() {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-  
-      request.onsuccess = function(event) {
-        db = event.target.result;
-        console.log('IndexedDBが開かれました');
-        displayHistory();
-      };
-  
-      request.onerror = function(event) {
-        console.error('IndexedDBのオープンエラー', event);
-      };
-  
-      request.onupgradeneeded = function(event) {
-        const db = event.target.result;
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
-        }
-      };
-    }
 
-    function saveHistory(url, title, iframeContent) {
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      // iframeContentを圧縮
-      const compressedContent = pako.gzip(iframeContent, { to: 'string' });
-      const historyItem = { url, title, iframeContent: compressedContent };
-      store.add(historyItem);
-      transaction.oncomplete = function() {
-        console.log('履歴が保存されました');
-        displayHistory();
-      };
-      transaction.onerror = function() {console.error('履歴の保存エラー');};
-    }
-  
-    // 履歴をプルダウンリストに表示
-    function displayHistory() {
-      const transaction = db.transaction([STORE_NAME], 'readonly');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.getAll();
-      request.onsuccess = function(event) {
-        const history = event.target.result;
-        const historySelect = document.getElementById('historySelect');
-        historySelect.innerHTML = '<option value="">履歴を選択してください</option>';
-        history.forEach((item, index) => {
-          const option = document.createElement('option');
-          option.value = item.id;  // 履歴のIDをvalueに設定
-          option.textContent = item.title;  // 履歴タイトルを表示
-          historySelect.appendChild(option);
-        });
-      };
-      request.onerror = function() {
-        console.error('履歴の取得エラー');
-      };
-    }
-  
-    
-    
-    function loadHistory(selectedIndex) {
-      if (selectedIndex === "") return;
-  
-      const transaction = db.transaction([STORE_NAME], 'readonly');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.get(Number(selectedIndex));
-  
-      request.onsuccess = function(event) {
-        const item = event.target.result;
-        const iframe = document.getElementById('pageIframe');
-        const doc = iframe.contentDocument || iframe.contentWindow.document;
-  
-        // 解凍したiframeContentを表示
-        const decompressedContent = pako.ungzip(item.iframeContent, { to: 'string' });
-  
-        doc.open();
-        doc.write(decompressedContent);
-        doc.close();
-  
-        document.getElementById('urlInput').value = item.url;
-        monitorIframeLinks();
-      };
-  
-      request.onerror = function() {
-        console.error('履歴のロードエラー');
-      };
-    }
-    // プルダウンから履歴を選択してロード
-    function loadHistoryFromSelect() {
-      const historySelect = document.getElementById('historySelect');
-      const selectedIndex = historySelect.value;
-      loadHistory(selectedIndex);
-    }
-  
-    // iframeのソースコードを取得して履歴に保存
-    function getIframeContent(iframe) {
-      return iframe.contentDocument.documentElement.outerHTML;
-    }
-  
-    // 履歴をクリア
-    function clearHistory() {
-      const transaction = db.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      store.clear();
-  
-      transaction.oncomplete = function() {
-        displayHistory();
-        alert('履歴が削除されました。');
-      };
-  
-      transaction.onerror = function() {
-        console.error('履歴の削除エラー');
-      };
-    }
-  
-    // DBを初期化
-    initDB();
-    fetchMemoryUsage();
-  </script>
-</body>
-</html>
+    // アクセス数を取得
+    const accessResponse = await fetch(`${FIREBASE_URL}/accessCount.json`);
+    const accessCount = (await accessResponse.json()) || 0;
+
+    // アクセス数を更新
+    await fetch(`${FIREBASE_URL}/accessCount.json`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(accessCount + 1)
+    });
+
+    console.log("履歴とアクセス数を更新しました");
+  } catch (error) {
+    console.error("更新中にエラーが発生しました:", error);
+  }
+}
