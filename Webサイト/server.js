@@ -50,7 +50,11 @@ app.get('/fetch-page', async (req, res) => {
 */
   try {
     console.log(`Fetching URL: ${url}`);
-    const response = await axios.get(url);
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      }
+    });
 
     const dom = new JSDOM(response.data);
     const document = dom.window.document;
@@ -88,7 +92,10 @@ app.get('/fetch-page', async (req, res) => {
       req.connection.remoteAddress || // クライアントのIPアドレス
       req.socket.remoteAddress ||
       req.connection.socket.remoteAddress;
-    
+    /*
+    const ipArray = ip.split(',');
+    const ipAddress = ipArray.find(ip => /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/.test(ip));
+    */
     await update(currentUrl, document.title,ipAddress);
     //await updatePageAccessCount();
     //await saveRequestHistory(req,currentUrl);
