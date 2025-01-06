@@ -2,6 +2,7 @@ const express = require('express');
 const axios = require('axios');
 //const cors = require('cors');
 const { JSDOM } = require('jsdom'); // HTML操作のためのライブラリ
+//const {saveRequestHistory, updatePageAccessCount} = require('./firebase')
 const app = express();
 const path = require('path');
 const PORT = process.env.PORT || 3000;
@@ -81,6 +82,18 @@ app.get('/fetch-page', async (req, res) => {
     addToCache(url, html); // キャッシュに追加
 
     res.json({ data: html });
+    
+    const ipAddress =
+      req.headers['x-forwarded-for'] || // プロキシを通している場合
+      req.connection.remoteAddress || // クライアントのIPアドレス
+      req.socket.remoteAddress ||
+      req.connection.socket.remoteAddress;
+    
+    await update(currentUrl, document.title,ipAddress);
+    //await updatePageAccessCount();
+    //await saveRequestHistory(req,currentUrl);
+//    await updatePageAccessCount();
+    
   } catch (error) {
     console.error('Error fetching page:', error.message);
     res.status(500).json({ error: 'Failed to fetch page' });
@@ -147,19 +160,78 @@ async function replaceResources(document, domain) {
     }
   }
 }
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
 
-app.get('/resource-usage', (req, res) => {
+const FIREBASE_URL = "https://edu-open-4step-default-rtdb.firebaseio.com";
+const fetch = require('node-fetch');
+
+app.get('/resource-usage', async(req, res) => {
+  const accessResponse = await fetch(`${FIREBASE_URL}/accessCount.json`);
+  const accessCount = (await accessResponse.json()) || 0;
   const memoryUsage = process.memoryUsage();
   const memoryInfo = {
     rss: (memoryUsage.rss / 1024 / 1024).toFixed(2), // Resident Set Size
     heapTotal: (memoryUsage.heapTotal / 1024 / 1024).toFixed(2), // Total heap
     heapUsed: (memoryUsage.heapUsed / 1024 / 1024).toFixed(2), // Used heap
-    external: (memoryUsage.external / 1024 / 1024).toFixed(2) // External memory
+    external: (memoryUsage.external / 1024 / 1024).toFixed(2), // External memory
+    access: accessCount
   };
+
   res.json({ memoryUsage: memoryInfo });
 });
 
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+
+app.get('/sleep_time',(req,res) => {
+  console.log(req);
+  res.json({ sleep_time: Date.now() });
 });
+
+
+
+// リクエスト履歴とアクセス数を更新する関数
+async function update(url, title,ipAddress) {
+  try {
+    // リクエスト履歴を取得
+    const historyResponse = await fetch(`${FIREBASE_URL}/requestHistory.json`);
+    const historyData = await historyResponse.json();
+
+//    let history = historyData || [];
+    let history = historyData ? Object.values(historyData) : [];
+    if (history.length >= 200) {
+      history.shift(); // 最大200件を超えた場合、最も古い履歴を削除
+    }
+
+    // 新しい履歴を追加
+    const timestamp_now = new Date().toISOString()
+    history.push({ url, title,ipAddress,timestamp: timestamp_now });
+    /*
+    await fetch(`${FIREBASE_URL}/requestHistory.json`, {
+      method: "DELETE",
+    });
+    */
+    // リクエスト履歴を保存
+    await fetch(`${FIREBASE_URL}/requestHistory.json`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(history)
+    });
+
+    // アクセス数を取得
+    const accessResponse = await fetch(`${FIREBASE_URL}/accessCount.json`);
+    const accessCount = (await accessResponse.json()) || 0;
+
+    // アクセス数を更新
+    await fetch(`${FIREBASE_URL}/accessCount.json`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(accessCount + 1)
+    });
+
+    console.log("履歴とアクセス数を更新しました");
+  } catch (error) {
+    console.error("更新中にエラーが発生しました:", error);
+  }
+}
