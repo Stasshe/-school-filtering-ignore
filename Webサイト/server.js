@@ -115,7 +115,7 @@ app.get('/fetch-page', async (req, res) => {
 
 // リソースの置き換え関数
 async function replaceResources(document, domain, deepfetch) {
-  /*
+  
   const cssLinks = document.querySelectorAll('link[rel="stylesheet"]');
   for (const cssLink of cssLinks) {
     const cssHref = cssLink.href;
@@ -147,7 +147,7 @@ async function replaceResources(document, domain, deepfetch) {
     }
   }
   
-  
+  /*
   
   
   
