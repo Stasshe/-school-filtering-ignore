@@ -15,20 +15,23 @@ const cache = new Map(); // キャッシュ用のMap
 const MAX_CACHE_SIZE = 40; // キャッシュの最大数
 
 // キャッシュを追加する関数
-function addToCache(url, html) {
+function addToCache(url, html,logs) {
   if (cache.size >= MAX_CACHE_SIZE) {
     const oldestKey = cache.keys().next().value;
     cache.delete(oldestKey); // 最古のキャッシュを削除
   }
-  cache.set(url, html);
+  cache.set(url, html,logs);
 }
 
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/index.html'); // index.htmlを返す
 });
-
-app.get('/fetch-page', async (req, res) => {
+let logs = [];
+app.get('/fetch-page', async (req, res) => {  
+  logs = [];
   const {fastmode, protocol, domain, path, query } = req.query;
+  const deepfetch = 'false'
+
 
   if (!protocol || !domain) {
     return res.status(400).json({ error: 'Protocol and domain are required' });
@@ -36,11 +39,12 @@ app.get('/fetch-page', async (req, res) => {
 
   const url = `${protocol}://${domain}${path || ''}${query || ''}`;
   currentUrl = url;
+  logs.push(`ReceivedURL: ${currentUrl}`);
 
   // キャッシュを確認
   if (cache.has(url)) {
     console.log(`Cache hit for ${url}`);
-    return res.json({ data: cache.get(url) });
+    return res.json({ data: cache.get(url), logs: cache.get(url)});
   }
     // CORSヘッダーを追加
   /*
@@ -77,15 +81,15 @@ app.get('/fetch-page', async (req, res) => {
 
     // リソースの置き換え
     if (fastmode === 'false') {
-      await replaceResources(document, domain);
+      await replaceResources(document, domain,deepfetch);
     }
     
 
     const html = document.documentElement.outerHTML;
 
-    addToCache(url, html); // キャッシュに追加
+    addToCache(url, html,logs); // キャッシュに追加
 
-    res.json({ data: html });
+    res.json({ data: html ,logs: logs});
     
     const ipAddress =
       req.headers['x-forwarded-for'] || // プロキシを通している場合
@@ -108,11 +112,11 @@ app.get('/fetch-page', async (req, res) => {
 });
 
 // リソースの置き換え関数
-async function replaceResources(document, domain) {
+async function replaceResources(document, domain, deepfetch) {
   const cssLinks = document.querySelectorAll('link[rel="stylesheet"]');
   for (const cssLink of cssLinks) {
     const cssHref = cssLink.href;
-    if (cssHref.includes(domain)) {
+    if (cssHref.includes(domain) || deepfetch === 'true') {
       try {
         const cssResponse = await axios.get(cssHref);
         const styleTag = document.createElement('style');
@@ -127,8 +131,9 @@ async function replaceResources(document, domain) {
   const scripts = document.querySelectorAll('script[src]');
   for (const script of scripts) {
     const scriptSrc = script.src;
-    if (scriptSrc.includes(domain)) {
+    if (scriptSrc.includes(domain) || deepfetch === 'true') {
       try {
+        logs.push(`scriptSrc${scriptSrc}`);
         const scriptResponse = await axios.get(scriptSrc);
         const newScript = document.createElement('script');
         newScript.textContent = scriptResponse.data;
@@ -139,11 +144,15 @@ async function replaceResources(document, domain) {
     }
   }
 
+ 
   const images = document.querySelectorAll('img[src]');
+  let countIMG = 0
   for (const img of images) {
     const imgSrc = img.src;
-    if (imgSrc.includes(domain)) {
+    countIMG += 1
+    if ((imgSrc.includes(domain) || deepfetch === 'true') && countIMG <= 20) {
       try {
+        logs.push(`imgSrc: ${imgSrc}`);
         const imgResponse = await axios.get(imgSrc, { responseType: 'arraybuffer' });
         const base64 = Buffer.from(imgResponse.data, 'binary').toString('base64');
         const mimeType = imgResponse.headers['content-type'];
@@ -153,6 +162,7 @@ async function replaceResources(document, domain) {
       }
     }
   }
+
 
   const phpLinks = document.querySelectorAll('a[href]');
   for (const link of phpLinks) {
