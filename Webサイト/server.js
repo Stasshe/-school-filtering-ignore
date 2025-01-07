@@ -15,12 +15,12 @@ const cache = new Map(); // キャッシュ用のMap
 const MAX_CACHE_SIZE = 40; // キャッシュの最大数
 
 // キャッシュを追加する関数
-function addToCache(url, html,logs) {
+function addToCache(url, html) {
   if (cache.size >= MAX_CACHE_SIZE) {
     const oldestKey = cache.keys().next().value;
     cache.delete(oldestKey); // 最古のキャッシュを削除
   }
-  cache.set(url, html,logs);
+  cache.set(url, html);
 }
 
 app.get('/', (req, res) => {
@@ -42,9 +42,10 @@ app.get('/fetch-page', async (req, res) => {
   logs.push(`ReceivedURL: ${currentUrl}`);
 
   // キャッシュを確認
-  if (cache.has(url)) {
+  const cache_url = `${fastmode}${url}`
+  if (cache.has(cache_url)) {
     console.log(`Cache hit for ${url}`);
-    return res.json({ data: cache.get(url), logs: cache.get(url)});
+    return res.json({ data: cache.get(cache_url)});
   }
     // CORSヘッダーを追加
   /*
@@ -54,11 +55,12 @@ app.get('/fetch-page', async (req, res) => {
 */
   try {
     console.log(`Fetching URL: ${url}`);
-    const response = await axios.get(url, {
+    const response = await axios.get(url)/*, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
       }
     });
+    */
 
     const dom = new JSDOM(response.data);
     const document = dom.window.document;
@@ -87,7 +89,7 @@ app.get('/fetch-page', async (req, res) => {
 
     const html = document.documentElement.outerHTML;
 
-    addToCache(url, html,logs); // キャッシュに追加
+    addToCache(`${fastmode}${url}`, html); // キャッシュに追加
 
     res.json({ data: html ,logs: logs});
     
@@ -113,6 +115,7 @@ app.get('/fetch-page', async (req, res) => {
 
 // リソースの置き換え関数
 async function replaceResources(document, domain, deepfetch) {
+  /*
   const cssLinks = document.querySelectorAll('link[rel="stylesheet"]');
   for (const cssLink of cssLinks) {
     const cssHref = cssLink.href;
@@ -127,7 +130,7 @@ async function replaceResources(document, domain, deepfetch) {
       }
     }
   }
-
+  
   const scripts = document.querySelectorAll('script[src]');
   for (const script of scripts) {
     const scriptSrc = script.src;
@@ -143,6 +146,9 @@ async function replaceResources(document, domain, deepfetch) {
       }
     }
   }
+  
+  
+  
   
   
   const original = document.querySelectorAll('img[data-original]');
@@ -165,6 +171,7 @@ async function replaceResources(document, domain, deepfetch) {
       }
     }
   }
+  */
 
   const phpLinks = document.querySelectorAll('a[href]');
   for (const link of phpLinks) {
@@ -178,6 +185,7 @@ async function replaceResources(document, domain, deepfetch) {
       }
     }
   }
+  
 }
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
@@ -266,18 +274,10 @@ app.get('/fetch-image', async (req, res) => {
   }
 
   try {
-    // 画像を取得
+    // 画像を取得  -----------画像だけじゃなくてリソース全て
     const response = await axios.get(url, { responseType: 'arraybuffer' });
-    /*
-    fetch(`${FIREBASE_URL}/requestHistory.json`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({data: response.data})
-    });
-*/
     res.setHeader('Content-Type',response.headers['content-type']);
     res.send(response.data);
-    //res.send(`type:"Buffer",data:${mimeType};base64,${base64}`);
   } catch (error) {
     console.error('Error fetching image:', error.message);
     res.status(500).send('Error fetching image');
