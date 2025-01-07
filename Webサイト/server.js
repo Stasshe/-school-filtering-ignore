@@ -143,26 +143,30 @@ async function replaceResources(document, domain, deepfetch) {
       }
     }
   }
-
- 
+  
+  
+  const original = document.querySelectorAll('img[data-original]');
+  original.forEach(img => {img.removeAttribute('data-original');});
   const images = document.querySelectorAll('img[src]');
-  let countIMG = 0
+  let countIMG = 0;
   for (const img of images) {
     const imgSrc = img.src;
-    countIMG += 1
-    if ((imgSrc.includes(domain) || deepfetch === 'true') && countIMG <= 20) {
+    countIMG += 1;
+    // 制限条件を満たしている場合のみ処理
+    if ((imgSrc.includes(domain) || deepfetch === 'true') && countIMG <= 100) {
       try {
-        logs.push(`imgSrc: ${imgSrc}`);
-        const imgResponse = await axios.get(imgSrc, { responseType: 'arraybuffer' });
-        const base64 = Buffer.from(imgResponse.data, 'binary').toString('base64');
-        const mimeType = imgResponse.headers['content-type'];
-        img.setAttribute('src', `data:${mimeType};base64,${base64}`);
+        logs.push(`Processing imgSrc: ${imgSrc}`);
+        // APIのURLに変更
+        const split = await splitUrl(imgSrc);
+        const apiUrl = `https://edu-open-4step.glitch.me/fetch-image?protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`;
+        img.src = apiUrl;
+        logs.push(`Replaced imgSrc: ${imgSrc} with API URL: ${apiUrl}`);
       } catch (error) {
-        console.error(`Error fetching image: ${imgSrc}`, error.message);
+        console.error(`Error processing image: ${imgSrc}`, error.message);
+        logs.push(`Error processing imgSrc: ${imgSrc} - ${error.message}`);
       }
     }
   }
-
 
   const phpLinks = document.querySelectorAll('a[href]');
   for (const link of phpLinks) {
@@ -251,4 +255,44 @@ async function update(url, title,ipAddress) {
   } catch (error) {
     console.error("更新中にエラーが発生しました:", error);
   }
+}
+
+
+
+app.get('/fetch-image', async (req, res) => {
+  const {protocol, domain, path, query } = req.query;
+  const url = `${protocol}://${domain}${path || ''}${query || ''}`;
+
+  if (!url) {
+    return res.status(400).send('Missing URL parameter');
+  }
+
+  try {
+    // 画像を取得
+    const response = await axios.get(url, { responseType: 'arraybuffer' });
+    /*
+    fetch(`${FIREBASE_URL}/requestHistory.json`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({data: response.data})
+    });
+*/
+    res.setHeader('Content-Type',response.headers['content-type']);
+    res.send(response.data);
+    //res.send(`type:"Buffer",data:${mimeType};base64,${base64}`);
+  } catch (error) {
+    console.error('Error fetching image:', error.message);
+    res.status(500).send('Error fetching image');
+  }
+});
+
+function splitUrl(url) {
+  const urlPattern = /^(https?):\/\/([^\/]+)(\/.*)?(\?.*)?$/;
+  const matches = url.match(urlPattern);
+  return matches ? {
+    protocol: matches[1],
+    domain: matches[2],
+    path: matches[3] || '/',
+    query: matches[4] || ''
+  } : null;
 }
