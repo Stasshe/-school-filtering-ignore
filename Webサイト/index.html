@@ -106,6 +106,7 @@
   <button onclick="clearPlaceholder()">クリア</button>
   <button onclick="fetchPage()">ページを取得</button>
   <!--<button onclick="openLogWindow()">ログを見る</button>-->
+  <button onclick="showLogs()">ログを見る</button>
   <button onclick="openAboutPage()">詳細</button>
   <button onclick="clearHistory()">履歴全削除</button>
   <select id="historySelect" onchange="loadHistoryFromSelect()">
@@ -199,7 +200,7 @@
 
     
     
-    
+    let serverLogs = [];
 
     // ページを取得してiframeに表示する関数
     function fetchPage() {
@@ -288,6 +289,9 @@
             fetch(`/fetch-page?fastmode=${isSimpleMode}&protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`)
               .then(response => response.json())
               .then(data => {
+                if (data.logs){
+                  serverLogs = data.logs;
+                }
                 if (data.data) {
                   const iframe = document.getElementById('pageIframe');
                   const doc = iframe.contentDocument || iframe.contentWindow.document;
@@ -625,6 +629,29 @@
     input.focus();  // フォーカスを当てる
   }
 };
+  </script>
+  <script>
+  function showLogs(){
+    if (serverLogs.length > 0) {
+      const newTab = window.open();
+      if (newTab) {
+        const logContent = `<pre>${serverLogs.join('\n')}</pre>`;
+        newTab.document.open();
+        newTab.document.write(`
+          <html>
+            <head><title>サーバーログ</title></head>
+            <body>${logContent}</body>
+          </html>
+        `);
+        newTab.document.close();
+      } else {
+        alert('新しいタブを開けませんでした。ポップアップブロックを無効にしてください。');
+      }
+    } else {
+      alert('現在、表示するログ情報がありません。');
+    }
+    
+  }
   </script>
 </body>
 </html>
