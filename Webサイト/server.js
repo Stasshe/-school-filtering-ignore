@@ -133,7 +133,7 @@ async function replaceResources(document, domain, deepfetch) {
     const scriptSrc = script.src;
     if (scriptSrc.includes(domain) || deepfetch === 'true') {
       try {
-        logs.push(`scriptSrc${scriptSrc}`);
+        logs.push(`scriptSrc: ${scriptSrc}`);
         const scriptResponse = await axios.get(scriptSrc);
         const newScript = document.createElement('script');
         newScript.textContent = scriptResponse.data;
@@ -148,12 +148,10 @@ async function replaceResources(document, domain, deepfetch) {
   const original = document.querySelectorAll('img[data-original]');
   original.forEach(img => {img.removeAttribute('data-original');});
   const images = document.querySelectorAll('img[src]');
-  let countIMG = 0;
   for (const img of images) {
     const imgSrc = img.src;
-    countIMG += 1;
     // 制限条件を満たしている場合のみ処理
-    if ((imgSrc.includes(domain) || deepfetch === 'true') && countIMG <= 100) {
+    if (imgSrc.includes(domain) || deepfetch === 'true') {
       try {
         logs.push(`Processing imgSrc: ${imgSrc}`);
         // APIのURLに変更
