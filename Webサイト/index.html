@@ -110,7 +110,7 @@
   <button onclick="fetchPage()">ページを取得</button>
   <!--<button onclick="openLogWindow()">ログを見る</button>-->
   <button onclick="showLogs()">ログを見る</button>
-  <button onclick="showVideo()">gamewith:埋め込み動画</button>
+  <button onclick="REresource()">画像・動画が読み込まれていない場合</button>
   <button onclick="openAboutPage()">詳細</button>
   <button onclick="clearHistory()">履歴全削除</button>
   <select id="historySelect" onchange="loadHistoryFromSelect()">
@@ -137,6 +137,10 @@
     const DB_NAME = 'pageHistoryDB';
     const DB_VERSION = 1;
     const STORE_NAME = 'history';
+    
+    const blocked_site = ["gamewith.jp"];
+    
+    
     did = false;
 
     // URLをhttp/https、ドメイン、URLパスに分ける関数
@@ -257,7 +261,7 @@
       if (isResourceInput(url)){
         const split = splitUrl(url);
         const url_api = `https://edu-open-4step.glitch.me/fetch-image?protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`;
-        window.location.href = url.url_api;
+        window.location.href = url_api;
         return;
       }
       
@@ -336,6 +340,12 @@
                     img.removeAttribute('data-use-lazyload');
                     console.log('removed_lazy');
                   });
+                  tempDiv.querySelectorAll('iframe[src*="youtube.com"]').forEach(iframe => {
+                    const url = iframe.src;
+                    const youtubeEmbedUrl = url.replace("youtube.com", "youtube-nocookie.com").replace("watch?v=", "embed/");
+                    iframe.src = youtubeEmbedUrl;
+                    console.log('YouTube URL changed to embed:', youtubeEmbedUrl);
+                  });
                   
                   
                   doc.open();
@@ -363,91 +373,7 @@
                   
                   
 iframe.onload = async () => {
-  if (!did) {
-    //setTimeout(() => {
-      did = true
-      console.log("client rewrite");
-      // iframeの内容が完全にロードされた後の処理
-      const original = doc.querySelectorAll('img[data-original]');
-      original.forEach(img => { img.removeAttribute('data-original'); });
-
-      const images = doc.querySelectorAll('img[src]');
-      for (const img of images) {
-        const imgSrc = img.src;
-
-        // 制限条件を満たしている場合のみ処理
-        if (imgSrc.includes(domain)) {
-          try {
-            if (domain === 'gamewith.jp') {
-              let noscript = null;
-              if (img.nextElementSibling && img.nextElementSibling.tagName === 'NOSCRIPT') {
-                noscript = img.nextElementSibling;
-              } else if (img.previousElementSibling && img.previousElementSibling.tagName === 'NOSCRIPT') {
-                noscript = img.previousElementSibling;
-              } else if (img.closest('div')) {
-                noscript = img.closest('div').querySelector('noscript');
-              }
-              if (noscript) {
-                const parser = new DOMParser();
-                const noscriptDoc = parser.parseFromString(noscript.innerHTML, 'text/html');
-                const noscriptImg = noscriptDoc.querySelector('img');
-                if (noscriptImg && noscriptImg.src) {
-                  const split = await splitUrl(noscriptImg.src);
-                  const apiUrl = `https://edu-open-4step.glitch.me/fetch-image?protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`;
-                  img.src = apiUrl;
-                  console.log(`Replaced img src with noscript img src: ${noscriptImg.src}`);
-                }
-              }else{
-                const split = await splitUrl(imgSrc);
-                const apiUrl = `https://edu-open-4step.glitch.me/fetch-image?protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`;
-                img.src = apiUrl;
-              }
-            } else {
-              console.log(imgSrc);
-              const split = await splitUrl(imgSrc);
-              const apiUrl = `https://edu-open-4step.glitch.me/fetch-image?protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`;
-              img.src = apiUrl;
-              console.log(apiUrl);
-            }
-            
-            try{img.removeAttribute('data-use-lazyload');}catch(_){}
-          } catch (error) {
-            console.error(`Error processing image: ${imgSrc}`, error.message);
-          }
-        }
-      }
-
-      const videos = doc.querySelectorAll('video[src]');
-      for (const video of videos) {
-        const videoSrc = video.src;
-        if (videoSrc.includes(domain)) {
-          try {
-            const split = await splitUrl(videoSrc);
-            const apiUrl = `https://edu-open-4step.glitch.me/fetch-image?protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`;
-            video.src = apiUrl;
-            const link = document.createElement('a');
-            link.href = apiUrl;
-            link.innerText = 'API URL';
-            link.style.position = 'relative';
-            link.style.zIndex = '9999';
-            link.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
-            link.style.padding = '5px';
-            link.style.borderRadius = '5px';
-            video.parentNode.insertBefore(link, video.nextSibling);
-          } catch (error) {
-            console.error(`Error fetching JavaScript: ${scriptSrc}`, error.message);
-          }
-        }
-      }
-
-      const newData = doc.documentElement.outerHTML;
-      // 再度docを開いて書き込み
-      doc.open();
-      doc.write(newData);
-      doc.close();
-      saveHistory(url, title, newData);  
-    //},1000);
-  }
+  await show_resource();
 }; 
                   
                   
@@ -502,8 +428,8 @@ iframe.onload = async () => {
             
             const newUrl = link.href;
             //alert('ページ遷移します');
-            console.log('ページ遷移します')
-            //void 0;
+            console.log('ページ遷移します');
+            void 0;
             //なぜお前が必要なんだ。教えてくれしかもこれ以上コメント行増やすとだめ
             window.postMessage({ type: 'link-clicked', url: newUrl }, '*');
             
@@ -799,39 +725,124 @@ iframe.onload = async () => {
   
   
   <script>
-    async function showVideo() {
-  const iframe = document.getElementById('pageIframe');
-  const doc = iframe.contentDocument || iframe.contentWindow.document;
-  const videos = doc.querySelectorAll('video[src]');
-  for (const video of videos) {
-    const videoSrc = video.src;
-    if (0 === 0) { // 修正
-      try {
-        const split = await splitUrl(videoSrc);
-        const apiUrl = `https://edu-open-4step.glitch.me/fetch-image?protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`;
-        video.src = apiUrl;
-        const link = document.createElement('a');
-        link.href = apiUrl;
-        link.innerText = 'API URL';
-        link.style.position = 'relative';
-        link.style.zIndex = '9999';
-        link.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
-        link.style.padding = '5px';
-        link.style.borderRadius = '5px';
-        video.parentNode.insertBefore(link, video.nextSibling);
-      } catch (error) {
-        console.error(`Error fetching JavaScript: ${videoSrc}`, error.message); // 修正
+ async function REresource(){
+   did = false;
+   show_resource();
+ }
+
+    
+    async function show_resource(){
+      const url = document.getElementById('urlInput').value;
+      const iframe = document.getElementById('pageIframe');
+      const doc = iframe.contentDocument || iframe.contentWindow.document;
+      const domain = splitUrl(url).domain;
+                  
+if (!did) {
+    //setTimeout(() => {
+      did = true
+      console.log("client rewrite");
+      // iframeの内容が完全にロードされた後の処理
+      const original = doc.querySelectorAll('img[data-original]');
+      original.forEach(img => { img.removeAttribute('data-original'); });
+      const ori = doc.querySelectorAll('img[data-src]');
+      ori.forEach(img => { img.removeAttribute('data-src'); });
+      
+
+
+
+      const images = doc.querySelectorAll('img[src]');
+      for (const img of images) {
+        const imgSrc = img.src;
+        let api_url_img = ""
+
+        // 制限条件を満たしている場合のみ処理
+        if (imgSrc.includes(domain) && !imgSrc.includes('edu-open-4step.glitch')) {
+          //if (domain === domain){imgSrc.style.height = "50px"}
+          try {
+            if (domain === 'gamewith.jp') {
+              let noscript = null;
+              if (img.nextElementSibling && img.nextElementSibling.tagName === 'NOSCRIPT') {
+                noscript = img.nextElementSibling;
+              } else if (img.previousElementSibling && img.previousElementSibling.tagName === 'NOSCRIPT') {
+                noscript = img.previousElementSibling;
+              } else if (img.closest('div')) {
+                noscript = img.closest('div').querySelector('noscript');
+              }
+              if (noscript) {
+                const parser = new DOMParser();
+                const noscriptDoc = parser.parseFromString(noscript.innerHTML, 'text/html');
+                const noscriptImg = noscriptDoc.querySelector('img');
+                if (noscriptImg && noscriptImg.src) {
+                  const split = await splitUrl(noscriptImg.src);
+                  const apiUrl = `https://edu-open-4step.glitch.me/fetch-image?protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`;
+                  img.src = apiUrl;
+                  api_url_img = apiUrl;
+                  console.log(`Replaced img src with noscript img src: ${noscriptImg.src}`);
+                }
+              }else{
+                const split = await splitUrl(imgSrc);
+                const apiUrl = `https://edu-open-4step.glitch.me/fetch-image?protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`;
+                img.src = apiUrl;
+                api_url_img = apiUrl;
+              }
+            } else {
+              console.log(imgSrc);
+              const split = await splitUrl(imgSrc);
+              const apiUrl = `https://edu-open-4step.glitch.me/fetch-image?protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`;
+              img.src = apiUrl;
+              api_url_img = apiUrl;
+              console.log(apiUrl);
+            }
+            try{img.removeAttribute('data-use-lazyload');}catch(_){}
+            /*
+            const link = document.createElement('a');
+            link.href = api_url_img;
+            link.innerText = 'API URL';
+            link.style.position = 'relative';
+            link.style.zIndex = '9999';
+            link.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+            link.style.padding = '5px';
+            link.style.borderRadius = '5px';
+            img.parentNode.insertBefore(link, img.nextSibling);
+            */
+          } catch (error) {
+            console.error(`Error processing image: ${imgSrc}`, error.message);
+          }
+        }
       }
-    }
+
+      const videos = doc.querySelectorAll('video[src]');
+      for (const video of videos) {
+        const videoSrc = video.src;
+        if (videoSrc.includes(domain)  && !videoSrc.includes('edu-open-4step.glitch')) {
+          try {
+            const split = await splitUrl(videoSrc);
+            const apiUrl = `https://edu-open-4step.glitch.me/fetch-image?protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`;
+            video.src = apiUrl;
+            const link = document.createElement('a');
+            link.href = apiUrl;
+            link.innerText = 'API URL';
+            link.style.position = 'relative';
+            link.style.zIndex = '9999';
+            link.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+            link.style.padding = '5px';
+            link.style.borderRadius = '5px';
+            video.parentNode.insertBefore(link, video.nextSibling);
+          } catch (error) {
+            console.error(`Error fetching JavaScript: ${scriptSrc}`, error.message);
+          }
+        }
+      }
+
+      const newData = doc.documentElement.outerHTML;
+      // 再度docを開いて書き込み
+      doc.open();
+      doc.write(newData);
+      doc.close();
+      saveHistory(url, title, newData);  
+    //},1000);
   }
-
-  const newData = doc.documentElement.outerHTML;
-  // 再度docを開いて書き込み
-  doc.open();
-  doc.write(newData);
-  doc.close();
-}
-
+    }
   
   </script>
 </body>
