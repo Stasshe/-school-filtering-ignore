@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proxy Browser</title>
+  <script src="//cdn.jsdelivr.net/npm/eruda"></script>
+  <script>eruda.init();</script>
+</head>
+<body>
+  <h1>Proxy Browser</h1>
+  <form id="proxy-form">
+    <label for="url">Enter URL:</label>
+    <input type="text" id="url" name = "url" placeholder="URLを入力 (例: https://example.com/page)" required>
+    <!--<input type="text" id="url" name="url" placeholder="https://example.com" required>-->
+    <button type="submit">Go</button>
+    <div id="memory-info">
+      <div>メモリ使用量</div>
+      <div class="memory-item" id="rss">RSS: 0 MB</div>
+      <div class="memory-item" id="heapTotal">Heap Total: 0 MB</div>
+      <div class="memory-item" id="heapUsed">Heap Used: 0 MB</div>
+      <div class="memory-item" id="external">External: 0 MB</div>
+    </div>
+
+  </form>
+  <iframe id="proxy-frame" style="width: 100%; height: 90vh; border: none;"></iframe>
+
+  <script>
+    
+    // URLをhttp/https、ドメイン、URLパスに分ける関数
+    function splitUrl(url) {
+      const urlPattern = /^(https?):\/\/([^\/]+)(\/.*)?(\?.*)?$/;
+      const matches = url.match(urlPattern);
+      return matches ? {
+        protocol: matches[1],
+        domain: matches[2],
+        path: matches[3] || '/',
+        query: matches[4] || ''
+      } : null;
+    }
+
+    
+    
+    document.getElementById("proxy-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const url = document.getElementById("url").value;
+      const split = splitUrl(url);
+      const send_url = `/proxy?protocol=${encodeURIComponent(split.protocol)}&domain=${encodeURIComponent(split.domain)}&path=${encodeURIComponent(split.path)}&query=${encodeURIComponent(split.query)}`;
+      console.log(send_url);
+      document.getElementById("proxy-frame").src = send_url;//send_url;
+    });
+  </script>
+  
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 5px;
+    }
+    p,checkbox {
+      margin: 0;
+      padding-top: 0;
+      font-size: 18px;
+    }
+    button, select, checkbox{
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+    input[type="text"] {
+      width: 98%;
+      height: 32px;
+      font-size: 16px;
+    }
+    #iframeContainer {
+      margin-top: 10px;
+      width: 100%;
+      height: 600px;
+      border: 1px solid #ddd;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    #loadingOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(255, 255, 255, 0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+    .loader {
+      width: 65px;
+      aspect-ratio: 1;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 9999;
+    }
+    .loader:before,
+    .loader:after {
+      content: "";
+      position: absolute;
+      border-radius: 50px;
+      box-shadow: 0 0 0 3px inset #000000;
+      animation: l4 2.5s infinite;
+    }
+    .loader:after {
+      animation-delay: -1.25s;
+    }
+    @keyframes l4 {
+      0% { inset: 0 35px 35px 0; }
+      12.5% { inset: 0 35px 0 0; }
+      25% { inset: 35px 35px 0 0; }
+      37.5% { inset: 35px 0 0 0; }
+      50% { inset: 35px 0 0 35px; }
+      62.5% { inset: 0 0 0 35px; }
+      75% { inset: 0 0 35px 35px; }
+      87.5% { inset: 0 0 35px 0; }
+      100% { inset: 0 35px 35px 0; }
+    }
+    #memory-info {
+      display: flex;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .memory-item {
+      padding: 5px;
+      font-size: 14px;
+    }
+  </style>
+</body>
+</html>
