@@ -1,0 +1,31 @@
+name: Scheduled Fetch and Save
+
+on:
+  schedule:
+    # Run every 5 minutes between 8:00 and 16:00 JST (UTC+9)
+    - cron: '*/5 23-7 * * *'
+
+jobs:
+  fetch_and_save:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Fetch data from API
+      run: |
+        response=$(curl -s -w "%{http_code}" -o /dev/null https://edu-open-4step.glitch.me/sleep-time)
+        if [ "$response" -eq 200 ]; then
+          echo "$(date '+%Y-%m-%d %H:%M:%S') - Response received" | cat - result.txt > temp && mv temp result.txt
+        fi
+
+    - name: Commit changes
+      run: |
+        git config --global user.name 'github-actions'
+        git config --global user.email 'github-actions@github.com'
+        git add result.txt
+        git commit -m "Add fetch timestamp"
+        git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
