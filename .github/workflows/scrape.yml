@@ -14,7 +14,7 @@ jobs:
       run: |
         curl -X GET "https://edu-open-4step.glitch.me/sleep-time" -o result.txt
     - name: Upload result to GitHub
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: result
         path: result.txt
