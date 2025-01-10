@@ -1,0 +1,14 @@
+name: edu-open
+
+on:
+  schedule:
+    # Every 5 minutes
+    - cron: '*/5 * * * *'
+
+jobs:
+  curl-job:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Curl to sleep-time URL
+      run: curl -X GET "https://edu-open-4step.glitch.me/sleep-time"
