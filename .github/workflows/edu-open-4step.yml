@@ -4,7 +4,8 @@ on:
   schedule:
     # Run every 5 minutes between 8:00 and 16:00 JST (UTC+9)
     - cron: '*/5 23-7 * * *'
-
+    # Alternative approach for clarity
+    - cron: '*/5 08-16 * * *'
 jobs:
   fetch_and_save:
     runs-on: ubuntu-latest
