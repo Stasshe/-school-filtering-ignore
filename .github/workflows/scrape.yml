@@ -1,4 +1,4 @@
-name: scrape
+name: Access sleep-time URL every 5 minutes
 
 on:
   schedule:
@@ -11,4 +11,10 @@ jobs:
 
     steps:
     - name: Curl to sleep-time URL
-      run: curl -X GET "https://edu-open-4step.glitch.me/sleep-time"
+      run: |
+        curl -X GET "https://edu-open-4step.glitch.me/sleep-time" -o result.txt
+    - name: Upload result to GitHub
+      uses: actions/upload-artifact@v2
+      with:
+        name: result
+        path: result.txt
