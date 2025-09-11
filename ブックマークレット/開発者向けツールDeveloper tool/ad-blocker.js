@@ -1,0 +1,159 @@
+javascript:(function() {
+const selectors = ['[class*="ad-"]','[class*="ads-"]','[class*="banner"]','[class*="popup"]','[class*="overlay"]','[id*="ad-"]','[id*="ads-"]','[id*="banner"]','[data-ad]','[data-ads]','iframe[src*="doubleclick"]','iframe[src*="googlesyndication"]','iframe[src*="googleadservices"]','iframe[src*="amazon-adsystem"]','iframe[src*="facebook.com/tr"]','iframe[src*="twitter.com/i/jot"]','ins.adsbygoogle','div.google-auto-placed','amp-ad','amp-embed','.ad-container','.advertisement','.sponsored','.promotion','.commercial'];
+const scripts = ['googletag','googletagmanager','googletagservices','doubleclick','google-analytics','googleadservices','googlesyndication','adnxs','adsystem','adsafeprotected','amazon-adsystem','facebook.com/tr','scorecardresearch','outbrain','taboola','criteo','quantserve'];
+const removeElements = () => {
+selectors.forEach(s => {
+try {
+document.querySelectorAll(s).forEach(e => {
+e.style.setProperty('display','none','important');
+e.style.setProperty('visibility','hidden','important');
+e.style.setProperty('opacity','0','important');
+e.style.setProperty('pointer-events','none','important');
+e.style.setProperty('position','absolute','important');
+e.style.setProperty('z-index','-9999','important');
+});
+} catch(err) {}
+});
+};
+const blockScripts = () => {
+document.querySelectorAll('script').forEach(s => {
+const src = s.src || s.innerHTML;
+if(scripts.some(pattern => src.includes(pattern))) {
+s.remove();
+}
+});
+};
+const interceptXHR = () => {
+const originalOpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url) {
+if(scripts.some(pattern => url.includes(pattern))) {
+return;
+}
+return originalOpen.apply(this, arguments);
+};
+};
+const interceptFetch = () => {
+const originalFetch = window.fetch;
+window.fetch = function(url) {
+if(typeof url === 'string' && scripts.some(pattern => url.includes(pattern))) {
+return Promise.reject(new Error('Blocked'));
+}
+return originalFetch.apply(this, arguments);
+};
+};
+const blockPopups = () => {
+window.open = () => null;
+window.alert = () => {};
+window.confirm = () => true;
+};
+const disableAntiAdblock = () => {
+Object.defineProperty(window, 'adBlockEnabled', {value: false, writable: false});
+Object.defineProperty(window, 'adBlockDetected', {value: false, writable: false});
+Object.defineProperty(window, 'canRunAds', {value: true, writable: false});
+Object.defineProperty(window, 'hasAdBlock', {value: false, writable: false});
+const bait = document.createElement('div');
+bait.className = 'pub_300x250 pub_300x250m pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links ad-text adSense adBlock adContent adBanner';
+bait.style.cssText = 'width:1px!important;height:1px!important;position:absolute!important;left:-10000px!important;top:-1000px!important;';
+document.body.appendChild(bait);
+};
+const cleanDOM = () => {
+document.querySelectorAll('*').forEach(el => {
+const computed = window.getComputedStyle(el);
+if(computed.position === 'fixed' && (computed.zIndex > 9999 || el.style.zIndex > 9999)) {
+if(el.querySelector('iframe') || el.querySelector('ins') || el.className.match(/modal|popup|overlay/i)) {
+el.remove();
+}
+}
+});
+document.querySelectorAll('[style*="position: fixed"]').forEach(el => {
+if(el.offsetWidth > window.innerWidth * 0.5 && el.offsetHeight > window.innerHeight * 0.5) {
+el.remove();
+}
+});
+};
+const preventTimers = () => {
+const originalSetTimeout = window.setTimeout;
+const originalSetInterval = window.setInterval;
+window.setTimeout = function(fn, delay) {
+if(fn && fn.toString().match(/ad|popup|banner|track/i)) {
+return 0;
+}
+return originalSetTimeout.apply(this, arguments);
+};
+window.setInterval = function(fn, delay) {
+if(fn && fn.toString().match(/ad|popup|banner|track/i)) {
+return 0;
+}
+return originalSetInterval.apply(this, arguments);
+};
+};
+const observeChanges = () => {
+const observer = new MutationObserver(() => {
+removeElements();
+blockScripts();
+cleanDOM();
+});
+observer.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['style','class']});
+};
+const protectVideoPlayers = () => {
+document.querySelectorAll('video').forEach(v => {
+v.style.setProperty('display','block','important');
+v.style.setProperty('visibility','visible','important');
+v.style.setProperty('opacity','1','important');
+});
+};
+const removeStickyElements = () => {
+document.querySelectorAll('[style*="sticky"],[style*="fixed"]').forEach(el => {
+if(el.className.match(/cookie|gdpr|consent|newsletter|subscribe|notification|alert|banner|bar|strip/i)) {
+el.remove();
+}
+});
+};
+const disableEventListeners = () => {
+['click','mousedown','mouseup','contextmenu','selectstart'].forEach(event => {
+document.addEventListener(event, e => {
+if(e.target.closest('[onclick*="window.open"]') || e.target.closest('[href^="javascript:"]')) {
+e.stopPropagation();
+e.preventDefault();
+}
+}, true);
+});
+};
+const restoreScrolling = () => {
+document.documentElement.style.setProperty('overflow','auto','important');
+document.body.style.setProperty('overflow','auto','important');
+document.documentElement.style.setProperty('position','static','important');
+document.body.style.setProperty('position','static','important');
+};
+const removeOverlays = () => {
+document.querySelectorAll('div,section').forEach(el => {
+const styles = window.getComputedStyle(el);
+if(styles.position === 'fixed' && styles.zIndex > 999 && el.offsetWidth >= window.innerWidth * 0.8 && el.offsetHeight >= window.innerHeight * 0.8) {
+el.remove();
+}
+});
+};
+interceptXHR();
+interceptFetch();
+blockPopups();
+disableAntiAdblock();
+preventTimers();
+disableEventListeners();
+removeElements();
+blockScripts();
+cleanDOM();
+removeStickyElements();
+restoreScrolling();
+removeOverlays();
+protectVideoPlayers();
+observeChanges();
+setInterval(() => {
+removeElements();
+cleanDOM();
+removeStickyElements();
+restoreScrolling();
+removeOverlays();
+protectVideoPlayers();
+}, 2000);
+console.log('Advanced AdBlocker activated');
+})();
