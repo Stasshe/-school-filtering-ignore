@@ -210,14 +210,14 @@
     // 通知表示を確実に実行
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
-            setTimeout(() => {
+            requestAnimationFrame(() => {
                 showNotification(totalBlocked);
-            }, 1000);
+            });
         });
     } else {
-        setTimeout(() => {
+        requestAnimationFrame(() => {
             showNotification(totalBlocked);
-        }, 1000);
+        });
     }
 
     function showNotification(blockedCount) {
