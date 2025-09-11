@@ -193,6 +193,16 @@
             background: #094771;
         }
         
+        .tree-node-header.search-highlight {
+            background: #515c6a !important;
+            border-radius: 2px;
+        }
+        
+        .tree-node-header.current-search {
+            background: #007acc !important;
+            color: white;
+        }
+        
         .tree-toggle {
             width: 16px;
             height: 16px;
@@ -233,6 +243,22 @@
         .tree-text {
             color: #d4d4d4;
             font-style: italic;
+        }
+        
+        .tree-script-content {
+            color: #dcdcaa;
+            background: rgba(220, 220, 170, 0.1);
+            padding: 2px 4px;
+            border-radius: 2px;
+            margin-left: 8px;
+        }
+        
+        .tree-style-content {
+            color: #4ec9b0;
+            background: rgba(78, 201, 176, 0.1);
+            padding: 2px 4px;
+            border-radius: 2px;
+            margin-left: 8px;
         }
         
         .tree-children {
@@ -278,15 +304,6 @@
             font-size: 14px;
             width: 14px;
             text-align: center;
-        }
-        
-        .highlight-result {
-            background: #515c6a !important;
-            border-radius: 2px;
-        }
-        
-        .code-highlight {
-            background: rgba(255, 255, 0, 0.2) !important;
         }
         
         @media (max-width: 768px) {
@@ -343,7 +360,7 @@
     const searchInput = document.createElement('input');
     searchInput.id = 'html-editor-search-input';
     searchInput.type = 'text';
-    searchInput.placeholder = 'Search (Ctrl+F)';
+    searchInput.placeholder = 'Search all content (Ctrl+F)';
     
     const searchBtn = document.createElement('button');
     searchBtn.className = 'html-editor-btn';
@@ -415,16 +432,111 @@
     let currentSearchIndex = 0;
     let currentEditingElement = null;
     let nodeMap = new Map();
+    let elementToNodeMap = new Map();
     let longPressTimer = null;
     let contextMenu = null;
+
+    // 全てのテキストコンテンツを抽出する関数
+    function extractAllTextContent(element) {
+        const textSources = [];
+        
+        // 要素のタグ名と属性
+        const tagInfo = {
+            type: 'tag',
+            element: element,
+            text: element.tagName.toLowerCase(),
+            searchableText: element.tagName.toLowerCase()
+        };
+        
+        // 属性の値も検索対象に含める
+        for (let attr of element.attributes) {
+            tagInfo.searchableText += ` ${attr.name}="${attr.value}"`;
+        }
+        textSources.push(tagInfo);
+        
+        // script要素の中身
+        if (element.tagName.toLowerCase() === 'script') {
+            const scriptContent = element.textContent || element.innerHTML;
+            if (scriptContent.trim()) {
+                textSources.push({
+                    type: 'script',
+                    element: element,
+                    text: scriptContent.trim(),
+                    searchableText: scriptContent.trim()
+                });
+            }
+        }
+        
+        // style要素の中身
+        if (element.tagName.toLowerCase() === 'style') {
+            const styleContent = element.textContent || element.innerHTML;
+            if (styleContent.trim()) {
+                textSources.push({
+                    type: 'style',
+                    element: element,
+                    text: styleContent.trim(),
+                    searchableText: styleContent.trim()
+                });
+            }
+        }
+        
+        // テキストノード
+        for (let child of element.childNodes) {
+            if (child.nodeType === 3) { // TEXT_NODE
+                const text = child.textContent.trim();
+                if (text) {
+                    textSources.push({
+                        type: 'text',
+                        element: element,
+                        textNode: child,
+                        text: text,
+                        searchableText: text
+                    });
+                }
+            }
+        }
+        
+        return textSources;
+    }
+
+    // 要素までのパスを展開する関数
+    function expandPathToElement(targetElement) {
+        const path = [];
+        let current = targetElement;
+        
+        // ルートまでのパスを取得
+        while (current && current !== document.documentElement.parentNode) {
+            path.unshift(current);
+            current = current.parentElement;
+        }
+        
+        // パス上の各要素に対応するノードを展開
+        for (let element of path) {
+            const treeNode = elementToNodeMap.get(element);
+            if (treeNode) {
+                const header = treeNode.querySelector('.tree-node-header');
+                const toggle = header?.querySelector('.tree-toggle');
+                const childrenDiv = treeNode.querySelector('.tree-children');
+                
+                if (toggle && childrenDiv && !toggle.classList.contains('expanded')) {
+                    toggle.classList.add('expanded');
+                    childrenDiv.classList.add('expanded');
+                }
+            }
+        }
+    }
 
     function parseDOM(element, depth = 0) {
         const nodeDiv = document.createElement('div');
         nodeDiv.className = 'tree-node';
         nodeDiv.style.paddingLeft = depth * 20 + 'px';
         
+        // 要素とノードの対応を保存
+        elementToNodeMap.set(element, nodeDiv);
+        
         const header = document.createElement('div');
         header.className = 'tree-node-header';
+        header.dataset.elementId = Math.random().toString(36).substr(2, 9);
         
         const toggle = document.createElement('span');
         toggle.className = 'tree-toggle';
@@ -458,10 +570,32 @@
         header.appendChild(attrSpan);
         header.appendChild(tagEnd);
         
+        // スクリプトやスタイルの内容を表示
+        if (element.tagName.toLowerCase() === 'script') {
+            const scriptContent = element.textContent || element.innerHTML;
+            if (scriptContent.trim()) {
+                const scriptSpan = document.createElement('span');
+                scriptSpan.className = 'tree-script-content';
+                scriptSpan.textContent = scriptContent.substring(0, 100) + (scriptContent.length > 100 ? '...' : '');
+                header.appendChild(scriptSpan);
+            }
+        }
+        
+        if (element.tagName.toLowerCase() === 'style') {
+            const styleContent = element.textContent || element.innerHTML;
+            if (styleContent.trim()) {
+                const styleSpan = document.createElement('span');
+                styleSpan.className = 'tree-style-content';
+                styleSpan.textContent = styleContent.substring(0, 100) + (styleContent.length > 100 ? '...' : '');
+                header.appendChild(styleSpan);
+            }
+        }
+        
         const childrenDiv = document.createElement('div');
         childrenDiv.className = 'tree-children';
         
         if (hasChildren) {
+            // テキストノードを表示
             const textContent = Array.from(element.childNodes)
                 .filter(n => n.nodeType === 3)
                 .map(n => n.textContent.trim())
@@ -474,11 +608,12 @@
                 textNode.style.paddingLeft = (depth + 1) * 20 + 'px';
                 const textSpan = document.createElement('span');
                 textSpan.className = 'tree-text';
-                textSpan.textContent = textContent.substring(0, 50) + (textContent.length > 50 ? '...' : '');
+                textSpan.textContent = textContent.substring(0, 200) + (textContent.length > 200 ? '...' : '');
                 textNode.appendChild(textSpan);
                 childrenDiv.appendChild(textNode);
             }
             
+            // 子要素を処理
             for (let child of element.children) {
                 childrenDiv.appendChild(parseDOM(child, depth + 1));
             }
@@ -506,7 +641,7 @@
             header.classList.add('selected');
         };
 
-        // 長押し・右クリックイベント
+        // 右クリックイベント
         header.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             showContextMenu(e, element);
@@ -577,7 +712,6 @@
         contextMenu.style.left = x + 'px';
         contextMenu.style.top = y + 'px';
         
-        // 画面外に出ないように調整
         const rect = contextMenu.getBoundingClientRect();
         if (rect.right > window.innerWidth) {
             contextMenu.style.left = (x - rect.width) + 'px';
@@ -599,25 +733,13 @@
         codeEditor.value = element.outerHTML;
         codePanel.classList.add('active');
         content.style.flex = '1';
-        
-        // シンタックスハイライト風の処理（簡易版）
-        highlightCode(codeEditor.value);
-    }
-
-    function highlightCode(code) {
-        // 簡易的なハイライト表示
-        codeTitle.textContent = `Code Editor - <${currentEditingElement.tagName.toLowerCase()}>`;
+        codeTitle.textContent = `Code Editor - <${element.tagName.toLowerCase()}>`;
     }
 
     function closeCodePanel() {
         codePanel.classList.remove('active');
         content.style.flex = '1';
         currentEditingElement = null;
-        
-        // ハイライトを削除
-        document.querySelectorAll('.code-highlight').forEach(el => {
-            el.classList.remove('code-highlight');
-        });
     }
 
     function removeElement(element) {
@@ -635,7 +757,6 @@
     function copyElementHTML(element) {
         if (navigator.clipboard) {
             navigator.clipboard.writeText(element.outerHTML).then(() => {
-                // 簡易的な通知
                 const originalText = codeTitle.textContent;
                 codeTitle.textContent = 'HTML copied to clipboard!';
                 setTimeout(() => {
@@ -648,32 +769,52 @@
     function buildTree() {
         content.innerHTML = '';
         nodeMap.clear();
+        elementToNodeMap.clear();
         const tree = parseDOM(document.documentElement);
         content.appendChild(tree);
     }
 
+    // 改良された検索機能
     function performSearch() {
         const query = searchInput.value.toLowerCase();
         if (!query) {
-            document.querySelectorAll('.highlight-result').forEach(el => {
-                el.classList.remove('highlight-result');
-            });
+            clearSearchHighlights();
             searchResults = [];
             searchInfo.textContent = '';
             return;
         }
 
+        clearSearchHighlights();
         searchResults = [];
-        document.querySelectorAll('.highlight-result').forEach(el => {
-            el.classList.remove('highlight-result');
-        });
 
-        document.querySelectorAll('.tree-node-header').forEach(header => {
-            if (header.textContent.toLowerCase().includes(query)) {
-                searchResults.push(header);
-                header.classList.add('highlight-result');
+        // 全ての要素を走査してテキストコンテンツを検索
+        function searchInElement(element) {
+            const textSources = extractAllTextContent(element);
+            
+            for (let source of textSources) {
+                if (source.searchableText.toLowerCase().includes(query)) {
+                    const treeNode = elementToNodeMap.get(source.element);
+                    if (treeNode) {
+                        const header = treeNode.querySelector('.tree-node-header');
+                        if (header && !searchResults.find(r => r.header === header)) {
+                            searchResults.push({
+                                header: header,
+                                element: source.element,
+                                textSource: source
+                            });
+                            header.classList.add('search-highlight');
+                        }
+                    }
+                }
             }
-        });
+            
+            // 子要素も検索
+            for (let child of element.children) {
+                searchInElement(child);
+            }
+        }
+
+        searchInElement(document.documentElement);
         
         if (searchResults.length > 0) {
             currentSearchIndex = 0;
@@ -683,8 +824,19 @@
         updateSearchInfo();
     }
 
+    function clearSearchHighlights() {
+        document.querySelectorAll('.search-highlight, .current-search').forEach(el => {
+            el.classList.remove('search-highlight', 'current-search');
+        });
+    }
+
     function navigateSearch(direction) {
         if (searchResults.length === 0) return;
+        
+        // 現在のハイライトを削除
+        if (searchResults[currentSearchIndex]) {
+            searchResults[currentSearchIndex].header.classList.remove('current-search');
+        }
         
         currentSearchIndex += direction;
         if (currentSearchIndex < 0) {
@@ -698,11 +850,35 @@
     }
 
     function jumpToResult(index) {
-        if (searchResults.length === 0) return;
+        if (searchResults.length === 0 || !searchResults[index]) return;
         
         const result = searchResults[index];
-        result.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        result.click();
+        
+        // 前の選択を解除
+        document.querySelectorAll('.current-search').forEach(el => {
+            el.classList.remove('current-search');
+        });
+        
+        // 要素までのパスを展開
+        expandPathToElement(result.element);
+        
+        // ハイライト
+        result.header.classList.add('current-search');
+        
+        // スクロールしてビューに表示
+        setTimeout(() => {
+            result.header.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center',
+                inline: 'nearest'
+            });
+        }, 100);
+        
+        // 選択状態にする
+        document.querySelectorAll('.tree-node-header.selected').forEach(h => {
+            h.classList.remove('selected');
+        });
+        result.header.classList.add('selected');
     }
 
     function updateSearchInfo() {
@@ -730,7 +906,6 @@
             }
         }
         
-        // 全体の変更を適用
         const newHTML = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
         document.open();
         document.write(newHTML);
@@ -769,6 +944,16 @@
         }
     });
 
+    searchInput.addEventListener('input', () => {
+        if (searchInput.value.trim()) {
+            performSearch();
+        } else {
+            clearSearchHighlights();
+            searchResults = [];
+            updateSearchInfo();
+        }
+    });
+
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === 'f') {
             e.preventDefault();
@@ -796,11 +981,10 @@
         }
     });
 
-    // コードエディターでのキーボードショートカット
     codeEditor.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === 's') {
             e.preventDefault();
-            applyCodeChanges();
+            applyChanges();
         }
         
         if (e.key === 'Escape') {
