@@ -1,4 +1,7 @@
-javascript:!(function() {
+// plz, before you paste, use this.
+// https://crocro.com/tools/item/gen_bookmarklet/#google_vignette
+
+(function() {
     const selectors = ['[class*="ad-"]','[class*="ads-"]','[class*="banner"]','[class*="popup"]','[class*="overlay"]','[id*="ad-"]','[id*="ads-"]','[id*="banner"]','[data-ad]','[data-ads]','iframe[src*="doubleclick"]','iframe[src*="googlesyndication"]','iframe[src*="googleadservices"]','iframe[src*="amazon-adsystem"]','iframe[src*="facebook.com/tr"]','iframe[src*="twitter.com/i/jot"]','ins.adsbygoogle','div.google-auto-placed','amp-ad','amp-embed','.ad-container','.advertisement','.sponsored','.promotion','.commercial'];
     const scripts = ['googletag','googletagmanager','googletagservices','doubleclick','google-analytics','googleadservices','googlesyndication','adnxs','adsystem','adsafeprotected','amazon-adsystem','facebook.com/tr','scorecardresearch','outbrain','taboola','criteo','quantserve'];
     let removedCount = 0;
