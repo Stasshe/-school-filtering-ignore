@@ -111,11 +111,61 @@
             text-align: center;
         }
         
+        #html-editor-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
         #html-editor-content {
             flex: 1;
             overflow-y: auto;
-            overflow-x: hidden;
+            overflow-x: auto;
             background: #1e1e1e;
+            transition: flex 0.3s ease;
+        }
+        
+        #html-editor-code-panel {
+            flex: 0;
+            background: #252526;
+            border-top: 1px solid #3e3e3e;
+            overflow: hidden;
+            transition: flex 0.3s ease;
+        }
+        
+        #html-editor-code-panel.active {
+            flex: 1;
+        }
+        
+        #html-editor-code-header {
+            background: #2d2d2d;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #3e3e3e;
+            color: #e0e0e0;
+            font-size: 12px;
+        }
+        
+        #html-editor-code-content {
+            height: calc(100% - 40px);
+            overflow: auto;
+        }
+        
+        #html-editor-code-editor {
+            width: 100%;
+            height: 100%;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border: none;
+            padding: 16px;
+            font-family: inherit;
+            font-size: 13px;
+            line-height: 1.4;
+            resize: none;
+            outline: none;
         }
         
         .tree-node {
@@ -123,6 +173,7 @@
             color: #d4d4d4;
             font-size: 13px;
             line-height: 22px;
+            min-width: max-content;
         }
         
         .tree-node-header {
@@ -131,6 +182,7 @@
             padding: 2px 8px;
             cursor: pointer;
             white-space: nowrap;
+            min-width: max-content;
         }
         
         .tree-node-header:hover {
@@ -192,32 +244,49 @@
             display: block;
         }
         
-        .tree-editor {
-            width: 100%;
-            background: #252526;
-            color: #d4d4d4;
+        .context-menu {
+            position: fixed;
+            background: #2d2d2d;
             border: 1px solid #3e3e3e;
-            padding: 8px;
-            font-family: inherit;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            z-index: 1000000;
+            min-width: 140px;
+            overflow: hidden;
+        }
+        
+        .context-menu-item {
+            padding: 8px 12px;
+            color: #d4d4d4;
+            cursor: pointer;
             font-size: 13px;
-            resize: vertical;
-            min-height: 60px;
-            margin: 4px 0;
-            display: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         
-        .tree-editor.active {
-            display: block;
+        .context-menu-item:hover {
+            background: #4a4a4a;
         }
         
-        .tree-editor:focus {
-            outline: none;
-            border-color: #007acc;
+        .context-menu-item.danger:hover {
+            background: #d73a49;
+            color: white;
+        }
+        
+        .context-menu-item .icon {
+            font-size: 14px;
+            width: 14px;
+            text-align: center;
         }
         
         .highlight-result {
             background: #515c6a !important;
             border-radius: 2px;
+        }
+        
+        .code-highlight {
+            background: rgba(255, 255, 0, 0.2) !important;
         }
         
         @media (max-width: 768px) {
@@ -301,18 +370,53 @@
     searchBar.appendChild(nextBtn);
     searchBar.appendChild(searchInfo);
 
+    const main = document.createElement('div');
+    main.id = 'html-editor-main';
+
     const content = document.createElement('div');
     content.id = 'html-editor-content';
 
+    const codePanel = document.createElement('div');
+    codePanel.id = 'html-editor-code-panel';
+    
+    const codeHeader = document.createElement('div');
+    codeHeader.id = 'html-editor-code-header';
+    
+    const codeTitle = document.createElement('span');
+    codeTitle.textContent = 'Code Editor';
+    
+    const codePanelClose = document.createElement('button');
+    codePanelClose.className = 'html-editor-btn';
+    codePanelClose.textContent = '×';
+    codePanelClose.onclick = closeCodePanel;
+    
+    codeHeader.appendChild(codeTitle);
+    codeHeader.appendChild(codePanelClose);
+    
+    const codeContent = document.createElement('div');
+    codeContent.id = 'html-editor-code-content';
+    
+    const codeEditor = document.createElement('textarea');
+    codeEditor.id = 'html-editor-code-editor';
+    codeEditor.spellcheck = false;
+    
+    codeContent.appendChild(codeEditor);
+    codePanel.appendChild(codeHeader);
+    codePanel.appendChild(codeContent);
+
+    main.appendChild(content);
+    main.appendChild(codePanel);
     panel.appendChild(header);
     panel.appendChild(searchBar);
-    panel.appendChild(content);
+    panel.appendChild(main);
     document.body.appendChild(panel);
 
     let searchResults = [];
     let currentSearchIndex = 0;
-    let currentEditingNode = null;
+    let currentEditingElement = null;
     let nodeMap = new Map();
+    let longPressTimer = null;
+    let contextMenu = null;
 
     function parseDOM(element, depth = 0) {
         const nodeDiv = document.createElement('div');
@@ -354,11 +458,6 @@
         header.appendChild(attrSpan);
         header.appendChild(tagEnd);
         
-        const editor = document.createElement('textarea');
-        editor.className = 'tree-editor';
-        editor.value = element.outerHTML;
-        editor.spellcheck = false;
-        
         const childrenDiv = document.createElement('div');
         childrenDiv.className = 'tree-children';
         
@@ -386,11 +485,11 @@
         }
         
         nodeDiv.appendChild(header);
-        nodeDiv.appendChild(editor);
         nodeDiv.appendChild(childrenDiv);
         
         nodeMap.set(nodeDiv, element);
         
+        // クリックイベント
         header.onclick = (e) => {
             e.stopPropagation();
             
@@ -405,31 +504,145 @@
                 h.classList.remove('selected');
             });
             header.classList.add('selected');
-            
-            document.querySelectorAll('.tree-editor.active').forEach(ed => {
-                ed.classList.remove('active');
-            });
-            editor.classList.add('active');
-            
-            currentEditingNode = {
-                element: element,
-                editor: editor
-            };
         };
-        
-        editor.oninput = () => {
-            if (currentEditingNode && currentEditingNode.editor === editor) {
-                try {
-                    const temp = document.createElement('div');
-                    temp.innerHTML = editor.value;
-                    if (temp.firstElementChild) {
-                        nodeMap.set(nodeDiv, temp.firstElementChild);
-                    }
-                } catch(e) {}
+
+        // 長押し・右クリックイベント
+        header.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showContextMenu(e, element);
+        });
+
+        header.addEventListener('touchstart', (e) => {
+            longPressTimer = setTimeout(() => {
+                showContextMenu(e.touches[0], element);
+            }, 500);
+        });
+
+        header.addEventListener('touchend', (e) => {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
             }
-        };
+        });
+
+        header.addEventListener('touchmove', (e) => {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        });
         
         return nodeDiv;
+    }
+
+    function showContextMenu(event, element) {
+        closeContextMenu();
+        
+        contextMenu = document.createElement('div');
+        contextMenu.className = 'context-menu';
+        
+        const editItem = document.createElement('div');
+        editItem.className = 'context-menu-item';
+        editItem.innerHTML = '<span class="icon">✏️</span>Edit Code';
+        editItem.onclick = () => {
+            editElementCode(element);
+            closeContextMenu();
+        };
+        
+        const removeItem = document.createElement('div');
+        removeItem.className = 'context-menu-item danger';
+        removeItem.innerHTML = '<span class="icon">🗑️</span>Remove Element';
+        removeItem.onclick = () => {
+            removeElement(element);
+            closeContextMenu();
+        };
+        
+        const copyItem = document.createElement('div');
+        copyItem.className = 'context-menu-item';
+        copyItem.innerHTML = '<span class="icon">📋</span>Copy HTML';
+        copyItem.onclick = () => {
+            copyElementHTML(element);
+            closeContextMenu();
+        };
+        
+        contextMenu.appendChild(editItem);
+        contextMenu.appendChild(removeItem);
+        contextMenu.appendChild(copyItem);
+        
+        document.body.appendChild(contextMenu);
+        
+        const x = event.clientX || event.pageX;
+        const y = event.clientY || event.pageY;
+        
+        contextMenu.style.left = x + 'px';
+        contextMenu.style.top = y + 'px';
+        
+        // 画面外に出ないように調整
+        const rect = contextMenu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            contextMenu.style.left = (x - rect.width) + 'px';
+        }
+        if (rect.bottom > window.innerHeight) {
+            contextMenu.style.top = (y - rect.height) + 'px';
+        }
+    }
+
+    function closeContextMenu() {
+        if (contextMenu) {
+            contextMenu.remove();
+            contextMenu = null;
+        }
+    }
+
+    function editElementCode(element) {
+        currentEditingElement = element;
+        codeEditor.value = element.outerHTML;
+        codePanel.classList.add('active');
+        content.style.flex = '1';
+        
+        // シンタックスハイライト風の処理（簡易版）
+        highlightCode(codeEditor.value);
+    }
+
+    function highlightCode(code) {
+        // 簡易的なハイライト表示
+        codeTitle.textContent = `Code Editor - <${currentEditingElement.tagName.toLowerCase()}>`;
+    }
+
+    function closeCodePanel() {
+        codePanel.classList.remove('active');
+        content.style.flex = '1';
+        currentEditingElement = null;
+        
+        // ハイライトを削除
+        document.querySelectorAll('.code-highlight').forEach(el => {
+            el.classList.remove('code-highlight');
+        });
+    }
+
+    function removeElement(element) {
+        if (element === document.documentElement || element === document.body) {
+            alert('Cannot remove html or body element');
+            return;
+        }
+        
+        if (confirm(`Remove <${element.tagName.toLowerCase()}> element?`)) {
+            element.remove();
+            buildTree();
+        }
+    }
+
+    function copyElementHTML(element) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(element.outerHTML).then(() => {
+                // 簡易的な通知
+                const originalText = codeTitle.textContent;
+                codeTitle.textContent = 'HTML copied to clipboard!';
+                setTimeout(() => {
+                    codeTitle.textContent = originalText;
+                }, 2000);
+            });
+        }
     }
 
     function buildTree() {
@@ -501,7 +714,24 @@
     }
 
     function applyChanges() {
-        const newHTML = reconstructHTML();
+        if (currentEditingElement && codeEditor.value.trim()) {
+            try {
+                const temp = document.createElement('div');
+                temp.innerHTML = codeEditor.value;
+                if (temp.firstElementChild) {
+                    currentEditingElement.outerHTML = temp.firstElementChild.outerHTML;
+                    closeCodePanel();
+                    buildTree();
+                    return;
+                }
+            } catch(e) {
+                alert('Invalid HTML code');
+                return;
+            }
+        }
+        
+        // 全体の変更を適用
+        const newHTML = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
         document.open();
         document.write(newHTML);
         document.close();
@@ -513,23 +743,17 @@
         }, 100);
     }
 
-    function reconstructHTML() {
-        const root = nodeMap.get(content.firstChild);
-        if (root) {
-            return '<!DOCTYPE html>\n' + root.outerHTML;
-        }
-        return document.documentElement.outerHTML;
-    }
-
     function refreshHTML() {
         buildTree();
     }
 
     function closePanel() {
+        closeContextMenu();
         panel.remove();
         style.remove();
     }
 
+    // イベントリスナー
     searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -558,7 +782,29 @@
         }
         
         if (e.key === 'Escape') {
-            closePanel();
+            if (codePanel.classList.contains('active')) {
+                closeCodePanel();
+            } else {
+                closePanel();
+            }
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (contextMenu && !contextMenu.contains(e.target)) {
+            closeContextMenu();
+        }
+    });
+
+    // コードエディターでのキーボードショートカット
+    codeEditor.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            applyCodeChanges();
+        }
+        
+        if (e.key === 'Escape') {
+            closeCodePanel();
         }
     });
 
