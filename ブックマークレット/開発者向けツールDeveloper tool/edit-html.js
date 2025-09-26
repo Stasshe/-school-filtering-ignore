@@ -131,49 +131,75 @@
             overflow-y: auto;
             overflow-x: auto;
             background: #1e1e1e;
-            transition: flex 0.3s ease;
         }
         
-        #html-editor-code-panel {
-            flex: 0;
-            background: #252526;
-            border-top: 1px solid #3e3e3e;
+        #html-editor-float-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #html-editor-float-window {
+            background: #1e1e1e;
+            border: 1px solid #3e3e3e;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+            width: 80%;
+            height: 80%;
+            max-width: 1200px;
+            max-height: 800px;
+            display: flex;
+            flex-direction: column;
             overflow: hidden;
-            transition: flex 0.3s ease;
         }
         
-        #html-editor-code-panel.active {
-            flex: 1;
-        }
-        
-        #html-editor-code-header {
+        #html-editor-float-header {
             background: #2d2d2d;
-            padding: 6px 12px;
+            padding: 12px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid #3e3e3e;
+            cursor: move;
+        }
+        
+        #html-editor-float-title {
             color: #e0e0e0;
-            font-size: 10px;
+            font-size: 13px;
+            font-weight: 600;
         }
         
-        #html-editor-code-content {
-            height: calc(100% - 32px);
-            overflow: auto;
+        #html-editor-float-controls {
+            display: flex;
+            gap: 8px;
         }
         
-        #html-editor-code-editor {
-            width: 100%;
-            height: 100%;
+        #html-editor-float-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        #html-editor-float-editor {
+            flex: 1;
             background: #1e1e1e;
             color: #d4d4d4;
             border: none;
-            padding: 12px;
+            padding: 16px;
             font-family: inherit;
-            font-size: 11px;
-            line-height: 1.3;
+            font-size: 12px;
+            line-height: 1.4;
             resize: none;
             outline: none;
+            overflow: auto;
         }
         
         .tree-node {
@@ -208,6 +234,7 @@
         
         .tree-node-header.current-search {
             background: #007acc !important;
+            outline: 1px solid #fff;
             color: white;
         }
         
@@ -318,6 +345,10 @@
             #html-editor-panel {
                 width: 100%;
             }
+            #html-editor-float-window {
+                width: 95%;
+                height: 90%;
+            }
         }
         
         @media (max-width: 1024px) and (orientation: landscape) {
@@ -401,40 +432,55 @@
   const content = document.createElement('div');
   content.id = 'html-editor-content';
 
-  const codePanel = document.createElement('div');
-  codePanel.id = 'html-editor-code-panel';
+  const floatOverlay = document.createElement('div');
+  floatOverlay.id = 'html-editor-float-overlay';
 
-  const codeHeader = document.createElement('div');
-  codeHeader.id = 'html-editor-code-header';
+  const floatWindow = document.createElement('div');
+  floatWindow.id = 'html-editor-float-window';
 
-  const codeTitle = document.createElement('span');
-  codeTitle.textContent = 'Code Editor';
+  const floatHeader = document.createElement('div');
+  floatHeader.id = 'html-editor-float-header';
 
-  const codePanelClose = document.createElement('button');
-  codePanelClose.className = 'html-editor-btn';
-  codePanelClose.textContent = '×';
-  codePanelClose.onclick = closeCodePanel;
+  const floatTitle = document.createElement('div');
+  floatTitle.id = 'html-editor-float-title';
+  floatTitle.textContent = 'Code Editor';
 
-  codeHeader.appendChild(codeTitle);
-  codeHeader.appendChild(codePanelClose);
+  const floatControls = document.createElement('div');
+  floatControls.id = 'html-editor-float-controls';
 
-  const codeContent = document.createElement('div');
-  codeContent.id = 'html-editor-code-content';
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'html-editor-btn';
+  saveBtn.textContent = 'Save';
+  saveBtn.onclick = saveFloatChanges;
 
-  const codeEditor = document.createElement('textarea');
-  codeEditor.id = 'html-editor-code-editor';
-  codeEditor.spellcheck = false;
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'html-editor-btn close';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.onclick = closeFloatWindow;
 
-  codeContent.appendChild(codeEditor);
-  codePanel.appendChild(codeHeader);
-  codePanel.appendChild(codeContent);
+  floatControls.appendChild(saveBtn);
+  floatControls.appendChild(cancelBtn);
+  floatHeader.appendChild(floatTitle);
+  floatHeader.appendChild(floatControls);
+
+  const floatContent = document.createElement('div');
+  floatContent.id = 'html-editor-float-content';
+
+  const floatEditor = document.createElement('textarea');
+  floatEditor.id = 'html-editor-float-editor';
+  floatEditor.spellcheck = false;
+
+  floatContent.appendChild(floatEditor);
+  floatWindow.appendChild(floatHeader);
+  floatWindow.appendChild(floatContent);
+  floatOverlay.appendChild(floatWindow);
 
   main.appendChild(content);
-  main.appendChild(codePanel);
   panel.appendChild(header);
   panel.appendChild(searchBar);
   panel.appendChild(main);
   document.body.appendChild(panel);
+  document.body.appendChild(floatOverlay);
 
   let searchResults = [];
   let currentSearchIndex = 0;
@@ -443,12 +489,16 @@
   let elementToNodeMap = new Map();
   let longPressTimer = null;
   let contextMenu = null;
+  let codeEditor = null;
+  let codePanel = null;
 
-  // 全てのテキストコンテンツを抽出する関数
+  function closeCodePanel() {
+    closeCodeEditor();
+  }
+
   function extractAllTextContent(element) {
     const textSources = [];
 
-    // 要素のタグ名と属性
     const tagInfo = {
       type: 'tag',
       element: element,
@@ -456,13 +506,11 @@
       searchableText: element.tagName.toLowerCase()
     };
 
-    // 属性の値も検索対象に含める
     for (let attr of element.attributes) {
       tagInfo.searchableText += ` ${attr.name}="${attr.value}"`;
     }
     textSources.push(tagInfo);
 
-    // script要素の中身
     if (element.tagName.toLowerCase() === 'script') {
       const scriptContent = element.textContent || element.innerHTML;
       if (scriptContent.trim()) {
@@ -475,7 +523,6 @@
       }
     }
 
-    // style要素の中身
     if (element.tagName.toLowerCase() === 'style') {
       const styleContent = element.textContent || element.innerHTML;
       if (styleContent.trim()) {
@@ -488,9 +535,8 @@
       }
     }
 
-    // テキストノード
     for (let child of element.childNodes) {
-      if (child.nodeType === 3) { // TEXT_NODE
+      if (child.nodeType === 3) {
         const text = child.textContent.trim();
         if (text) {
           textSources.push({
@@ -507,18 +553,15 @@
     return textSources;
   }
 
-  // 要素までのパスを展開する関数
   function expandPathToElement(targetElement) {
     const path = [];
     let current = targetElement;
 
-    // ルートまでのパスを取得
     while (current && current !== document.documentElement.parentNode) {
       path.unshift(current);
       current = current.parentElement;
     }
 
-    // パス上の各要素に対応するノードを展開
     for (let element of path) {
       const treeNode = elementToNodeMap.get(element);
       if (treeNode) {
@@ -539,7 +582,6 @@
     nodeDiv.className = 'tree-node';
     nodeDiv.style.paddingLeft = depth * 16 + 'px';
 
-    // 要素とノードの対応を保存
     elementToNodeMap.set(element, nodeDiv);
 
     const header = document.createElement('div');
@@ -578,7 +620,6 @@
     header.appendChild(attrSpan);
     header.appendChild(tagEnd);
 
-    // スクリプトやスタイルの内容を表示
     if (element.tagName.toLowerCase() === 'script') {
       const scriptContent = element.textContent || element.innerHTML;
       if (scriptContent.trim()) {
@@ -603,7 +644,6 @@
     childrenDiv.className = 'tree-children';
 
     if (hasChildren) {
-      // テキストノードを表示
       const textContent = Array.from(element.childNodes)
         .filter(n => n.nodeType === 3)
         .map(n => n.textContent.trim())
@@ -621,7 +661,6 @@
         childrenDiv.appendChild(textNode);
       }
 
-      // 子要素を処理
       for (let child of element.children) {
         childrenDiv.appendChild(parseDOM(child, depth + 1));
       }
@@ -632,7 +671,6 @@
 
     nodeMap.set(nodeDiv, element);
 
-    // クリックイベント
     header.onclick = (e) => {
       e.stopPropagation();
 
@@ -649,7 +687,6 @@
       header.classList.add('selected');
     };
 
-    // 右クリックイベント
     header.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       showContextMenu(e, element);
@@ -738,16 +775,33 @@
 
   function editElementCode(element) {
     currentEditingElement = element;
-    codeEditor.value = element.outerHTML;
-    codePanel.classList.add('active');
-    content.style.flex = '1';
-    codeTitle.textContent = `Code Editor - <${element.tagName.toLowerCase()}>`;
+    floatEditor.value = element.outerHTML;
+    floatTitle.textContent = `Code Editor - <${element.tagName.toLowerCase()}>`;
+    floatOverlay.style.display = 'flex';
+    floatEditor.focus();
   }
 
-  function closeCodePanel() {
-    codePanel.classList.remove('active');
-    content.style.flex = '1';
+  function closeFloatWindow() {
+    floatOverlay.style.display = 'none';
     currentEditingElement = null;
+  }
+
+  function saveFloatChanges() {
+    if (currentEditingElement && floatEditor.value.trim()) {
+      try {
+        const temp = document.createElement('div');
+        temp.innerHTML = floatEditor.value;
+        if (temp.firstElementChild) {
+          currentEditingElement.outerHTML = temp.firstElementChild.outerHTML;
+          closeFloatWindow();
+          buildTree();
+          return;
+        }
+      } catch (e) {
+        alert('Invalid HTML code');
+        return;
+      }
+    }
   }
 
   function removeElement(element) {
@@ -765,10 +819,10 @@
   function copyElementHTML(element) {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(element.outerHTML).then(() => {
-        const originalText = codeTitle.textContent;
-        codeTitle.textContent = 'HTML copied to clipboard!';
+        const originalText = title.textContent;
+        title.textContent = 'HTML copied to clipboard!';
         setTimeout(() => {
-          codeTitle.textContent = originalText;
+          title.textContent = originalText;
         }, 2000);
       });
     }
@@ -782,7 +836,6 @@
     content.appendChild(tree);
   }
 
-  // 改良された検索機能
   function performSearch() {
     const query = searchInput.value.toLowerCase();
     if (!query) {
@@ -795,7 +848,6 @@
     clearSearchHighlights();
     searchResults = [];
 
-    // 全ての要素を走査してテキストコンテンツを検索
     function searchInElement(element) {
       const textSources = extractAllTextContent(element);
 
@@ -816,7 +868,6 @@
         }
       }
 
-      // 子要素も検索
       for (let child of element.children) {
         searchInElement(child);
       }
@@ -841,7 +892,6 @@
   function navigateSearch(direction) {
     if (searchResults.length === 0) return;
 
-    // 現在のハイライトを削除
     if (searchResults[currentSearchIndex]) {
       searchResults[currentSearchIndex].header.classList.remove('current-search');
     }
@@ -862,32 +912,25 @@
 
     const result = searchResults[index];
 
-    // 前の選択を解除
     document.querySelectorAll('.current-search').forEach(el => {
       el.classList.remove('current-search');
     });
 
-    // 要素までのパスを展開
     expandPathToElement(result.element);
 
-    // ハイライト
     result.header.classList.add('current-search');
 
-    // 強制スクロール - より確実にスクロールするように改善
     const container = content;
     const targetRect = result.header.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
 
-    // 要素がビューの外にある場合、強制的にスクロール
     if (targetRect.top < containerRect.top || targetRect.bottom > containerRect.bottom) {
-      // まず即座にスクロール
       result.header.scrollIntoView({
         behavior: 'auto',
         block: 'center',
         inline: 'nearest'
       });
 
-      // 少し遅延してからもう一度スクロール（展開のアニメーションが完了してから）
       setTimeout(() => {
         result.header.scrollIntoView({
           behavior: 'smooth',
@@ -896,7 +939,6 @@
         });
       }, 50);
 
-      // さらに遅延してから最終確認のスクロール
       setTimeout(() => {
         const newTargetRect = result.header.getBoundingClientRect();
         const newContainerRect = container.getBoundingClientRect();
@@ -907,8 +949,7 @@
         }
       }, 100);
     }
-    
-    // 選択状態にする
+
     document.querySelectorAll('.tree-node-header.selected').forEach(h => {
       h.classList.remove('selected');
     });
@@ -1012,17 +1053,6 @@
   document.addEventListener('click', (e) => {
     if (contextMenu && !contextMenu.contains(e.target)) {
       closeContextMenu();
-    }
-  });
-
-  codeEditor.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.key === 's') {
-      e.preventDefault();
-      applyChanges();
-    }
-
-    if (e.key === 'Escape') {
-      closeCodePanel();
     }
   });
 
