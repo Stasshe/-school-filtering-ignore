@@ -5,6 +5,261 @@
     return;
   }
 
+  // Inspector Mode Feature - Added at the top
+  let inspectorMode = false;
+  let hoveredElement = null;
+  let selectedInspectorElement = null;
+  const inspectorOverlay = document.createElement('div');
+  inspectorOverlay.style.cssText = `
+    position: fixed;
+    pointer-events: none;
+    border: 2px solid #007acc;
+    background: rgba(0, 122, 204, 0.1);
+    z-index: 999998;
+    display: none;
+    transition: all 0.1s ease;
+  `;
+  document.body.appendChild(inspectorOverlay);
+
+  const inspectorLabel = document.createElement('div');
+  inspectorLabel.style.cssText = `
+    position: fixed;
+    background: #007acc;
+    color: white;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: monospace;
+    border-radius: 3px;
+    z-index: 999998;
+    display: none;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  `;
+  document.body.appendChild(inspectorLabel);
+
+  // ショートカットキーのイベントリスナーを追加
+  document.addEventListener('keydown', function (e) {
+    // Ctrl + Shift + I (Windows/Linux) または Cmd + Shift + I (Mac) でインスペクターモードを切り替え
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'I') {
+      e.preventDefault();
+      toggleInspectorMode();
+    }
+
+    // Escapeキーでインスペクターモードを解除
+    if (e.key === 'Escape' && inspectorMode) {
+      e.preventDefault();
+      disableInspectorMode();
+    }
+  });
+
+  function toggleInspectorMode() {
+    if (inspectorMode) {
+      disableInspectorMode();
+    } else {
+      enableInspectorMode();
+    }
+  }
+
+  function enableInspectorMode() {
+    inspectorMode = true;
+    document.body.style.cursor = 'crosshair';
+
+    // インスペクターモード開始の視覚的フィードバック
+    showInspectorNotification('インスペクターモード ON（Escape で解除）');
+
+    // Add event listeners for inspector
+    document.addEventListener('mousemove', inspectorMouseMove, true);
+    document.addEventListener('click', inspectorClick, true);
+    document.addEventListener('mouseout', inspectorMouseOut, true);
+  }
+
+  function disableInspectorMode() {
+    inspectorMode = false;
+    document.body.style.cursor = '';
+    inspectorOverlay.style.display = 'none';
+    inspectorLabel.style.display = 'none';
+
+    // インスペクターモード終了の視覚的フィードバック
+    showInspectorNotification('インスペクターモード OFF');
+
+    // Remove event listeners
+    document.removeEventListener('mousemove', inspectorMouseMove, true);
+    document.removeEventListener('click', inspectorClick, true);
+    document.removeEventListener('mouseout', inspectorMouseOut, true);
+
+    // Clear selected element highlight
+    if (selectedInspectorElement) {
+      selectedInspectorElement.style.outline = '';
+      selectedInspectorElement = null;
+    }
+  }
+
+  function showInspectorNotification(message) {
+    // 通知用の要素を作成
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: #007acc;
+      color: white;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-family: system-ui, -apple-system, sans-serif;
+      border-radius: 6px;
+      z-index: 999999;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      opacity: 0;
+      transform: translateY(-20px);
+      transition: all 0.3s ease;
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    // フェードイン
+    setTimeout(() => {
+      notification.style.opacity = '1';
+      notification.style.transform = 'translateY(0)';
+    }, 10);
+
+    // 2秒後にフェードアウト
+    setTimeout(() => {
+      notification.style.opacity = '0';
+      notification.style.transform = 'translateY(-20px)';
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 300);
+    }, 2000);
+  }
+
+  function inspectorMouseMove(e) {
+    if (!inspectorMode) return;
+
+    const element = document.elementFromPoint(e.clientX, e.clientY);
+    if (!element || element === inspectorOverlay || element === inspectorLabel ||
+      element.closest('#html-editor-panel') || element.closest('#html-editor-float-overlay')) {
+      return;
+    }
+
+    if (element !== hoveredElement) {
+      hoveredElement = element;
+      highlightElement(element, e);
+    }
+  }
+
+  function inspectorClick(e) {
+    if (!inspectorMode) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const element = document.elementFromPoint(e.clientX, e.clientY);
+    if (!element || element === inspectorOverlay || element === inspectorLabel ||
+      element.closest('#html-editor-panel') || element.closest('#html-editor-float-overlay')) {
+      return;
+    }
+
+    // Clear previous selection
+    if (selectedInspectorElement && selectedInspectorElement !== element) {
+      selectedInspectorElement.style.outline = '';
+    }
+
+    // Highlight selected element
+    selectedInspectorElement = element;
+    element.style.outline = '2px dashed #ff6b6b';
+
+    // Find and jump to element in tree
+    jumpToElementInTree(element);
+
+    // 要素を選択したらインスペクターモードを自動で解除
+    setTimeout(() => {
+      disableInspectorMode();
+    }, 100); // 少し遅延を入れてアニメーションが完了してから
+  }
+
+  function inspectorMouseOut(e) {
+    if (!inspectorMode) return;
+    inspectorOverlay.style.display = 'none';
+    inspectorLabel.style.display = 'none';
+    hoveredElement = null;
+  }
+
+  function highlightElement(element, event) {
+    const rect = element.getBoundingClientRect();
+
+    // Update overlay position
+    inspectorOverlay.style.display = 'block';
+    inspectorOverlay.style.left = rect.left + 'px';
+    inspectorOverlay.style.top = rect.top + 'px';
+    inspectorOverlay.style.width = rect.width + 'px';
+    inspectorOverlay.style.height = rect.height + 'px';
+
+    // Update label
+    const tagName = element.tagName.toLowerCase();
+    const id = element.id ? `#${element.id}` : '';
+    const classes = element.className ? `.${element.className.split(' ').filter(c => c).join('.')}` : '';
+    const dimensions = `${Math.round(rect.width)}×${Math.round(rect.height)}`;
+
+    inspectorLabel.textContent = `${tagName}${id}${classes} [${dimensions}]`;
+    inspectorLabel.style.display = 'block';
+
+    // Position label
+    let labelX = event.clientX + 10;
+    let labelY = event.clientY + 20;
+
+    // Adjust if label would go off screen
+    const labelRect = inspectorLabel.getBoundingClientRect();
+    if (labelX + labelRect.width > window.innerWidth) {
+      labelX = event.clientX - labelRect.width - 10;
+    }
+    if (labelY + labelRect.height > window.innerHeight) {
+      labelY = event.clientY - labelRect.height - 10;
+    }
+
+    inspectorLabel.style.left = labelX + 'px';
+    inspectorLabel.style.top = labelY + 'px';
+  }
+
+  function jumpToElementInTree(targetElement) {
+    // Expand path to element
+    expandPathToElement(targetElement);
+
+    // Find and highlight the tree node
+    const treeNode = elementToNodeMap.get(targetElement);
+    if (treeNode) {
+      const header = treeNode.querySelector('.tree-node-header');
+      if (header) {
+        // Clear previous selections
+        document.querySelectorAll('.tree-node-header.selected').forEach(h => {
+          h.classList.remove('selected');
+        });
+        document.querySelectorAll('.tree-node-header.inspector-selected').forEach(h => {
+          h.classList.remove('inspector-selected');
+        });
+
+        // Add selection classes
+        header.classList.add('selected', 'inspector-selected');
+
+        // Scroll to element
+        header.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'nearest'
+        });
+
+        // Add temporary highlight effect
+        header.style.transition = 'background-color 0.3s ease';
+        header.style.backgroundColor = '#ff6b6b';
+        setTimeout(() => {
+          header.style.backgroundColor = '';
+        }, 500);
+      }
+    }
+  }
+
   const style = document.createElement('style');
   style.textContent = `
         #html-editor-panel {
@@ -69,6 +324,17 @@
         
         .html-editor-btn:active {
             transform: scale(0.95);
+        }
+        
+        .html-editor-btn.active {
+            background: #007acc;
+            color: white;
+            border-color: #007acc;
+        }
+        
+        .html-editor-btn.active:hover {
+            background: #005a9e;
+            border-color: #005a9e;
         }
         
         .html-editor-btn.close {
@@ -227,6 +493,10 @@
             background: #094771;
         }
         
+        .tree-node-header.inspector-selected {
+            background: #6b1f1f !important;
+        }
+        
         .tree-node-header.search-highlight {
             background: #515c6a !important;
             border-radius: 2px;
@@ -372,6 +642,20 @@
   const controls = document.createElement('div');
   controls.id = 'html-editor-controls';
 
+  const inspectBtn = document.createElement('button');
+  inspectBtn.className = 'html-editor-btn';
+  inspectBtn.textContent = '🔍';
+  inspectBtn.title = 'Toggle Inspector Mode';
+  inspectBtn.onclick = () => {
+    if (inspectorMode) {
+      disableInspectorMode();
+      inspectBtn.classList.remove('active');
+    } else {
+      enableInspectorMode();
+      inspectBtn.classList.add('active');
+    }
+  };
+
   const applyBtn = document.createElement('button');
   applyBtn.className = 'html-editor-btn';
   applyBtn.textContent = 'Apply';
@@ -387,6 +671,7 @@
   closeBtn.textContent = '✕';
   closeBtn.onclick = closePanel;
 
+  controls.appendChild(inspectBtn);
   controls.appendChild(applyBtn);
   controls.appendChild(refreshBtn);
   controls.appendChild(closeBtn);
