@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>edit-html.js テスト</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: sans-serif; margin: 2em; background: #f5f5f5; }
+    h1 { color: #007acc; }
+    .sample { border: 1px solid #ccc; padding: 1em; background: #fff; margin-bottom: 1em; }
+    button { font-size: 1em; padding: 0.5em 1em; }
+  </style>
+</head>
+<body>
+  <h1>edit-html.js テストページ</h1>
+  <div class="sample" id="sample1">
+    <h2>サンプル要素1</h2>
+    <p>これはテスト用の段落です。</p>
+    <ul>
+      <li>リスト1</li>
+      <li>リスト2</li>
+    </ul>
+  </div>
+  <div class="sample" id="sample2">
+    <h2>サンプル要素2</h2>
+    <p>別のテスト要素。</p>
+    <img src="https://placehold.co/100x60" alt="サンプル画像">
+  </div>
+  <button onclick="loadEditor()">HTMLエディタを起動</button>
+  <script src="./edit-html.js"></script>
+  <script>
+    function loadEditor() {
+      // edit-html.jsは即時実行なので、ボタンで再実行したい場合はscriptタグを再挿入
+      const oldScript = document.querySelector('script[data-editor]');
+      if (oldScript) oldScript.remove();
+      const script = document.createElement('script');
+      //script.src = '../開発者向けツールDeveloper tool/edit-html.js';
+      script.src = './edit-html.js';
+      script.setAttribute('data-editor', '1');
+      document.body.appendChild(script);
+    }
+  </script>
+</body>
+</html>

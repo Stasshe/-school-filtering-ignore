@@ -468,22 +468,35 @@
             overflow: auto;
         }
         
-        .tree-node {
-            user-select: none;
-            color: #d4d4d4;
-            font-size: 11px;
-            line-height: 18px;
-            min-width: max-content;
-        }
+    .tree-node,
+    .tree-node *,
+    .tree-node-header,
+    .tree-node-header *,
+    .tree-children,
+    .tree-children *,
+    .tree-text,
+    .tree-script-content,
+    .tree-style-content {
+      user-select: none !important;
+      -webkit-user-select: none !important;
+      -ms-user-select: none !important;
+      -moz-user-select: none !important;
+    }
+    .tree-node {
+      color: #d4d4d4;
+      font-size: 11px;
+      line-height: 18px;
+      min-width: max-content;
+    }
         
-        .tree-node-header {
-            display: flex;
-            align-items: center;
-            padding: 1px 6px;
-            cursor: pointer;
-            white-space: nowrap;
-            min-width: max-content;
-        }
+    .tree-node-header {
+      display: flex;
+      align-items: center;
+      padding: 1px 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      min-width: max-content;
+    }
         
         .tree-node-header:hover {
             background: #2a2a2a;
@@ -546,11 +559,13 @@
         }
         
         .tree-text {
+            user-select: none;
             color: #d4d4d4;
             font-style: italic;
         }
         
         .tree-script-content {
+            user-select: none;
             color: #dcdcaa;
             background: rgba(220, 220, 170, 0.1);
             padding: 1px 3px;
@@ -559,6 +574,7 @@
         }
         
         .tree-style-content {
+            user-select: none;
             color: #4ec9b0;
             background: rgba(78, 201, 176, 0.1);
             padding: 1px 3px;
@@ -567,6 +583,7 @@
         }
         
         .tree-children {
+            user-select: none;
             padding-left: 16px;
             display: none;
         }
@@ -625,6 +642,12 @@
             #html-editor-panel {
                 width: 50%;
             }
+        }
+
+        .html-editor-tree-highlight {
+          outline: 2px solid #ff9800 !important;
+          outline-offset: 0px !important;
+          transition: outline 0.2s;
         }
     `;
   document.head.appendChild(style);
@@ -966,10 +989,24 @@
         }
       }
 
+      // 既存の選択状態を解除
       document.querySelectorAll('.tree-node-header.selected').forEach(h => {
         h.classList.remove('selected');
       });
       header.classList.add('selected');
+
+      // --- ここから枠線ハイライト処理 ---
+      // 既存の枠線を消す
+      document.querySelectorAll('.html-editor-tree-highlight').forEach(el => {
+        el.classList.remove('html-editor-tree-highlight');
+        el.style.outline = '';
+      });
+      // 新たに選択した要素に枠線を付与
+      const selectedElement = nodeMap.get(nodeDiv);
+      if (selectedElement && selectedElement !== document.documentElement && selectedElement !== document.body) {
+        selectedElement.classList.add('html-editor-tree-highlight');
+        selectedElement.style.outline = '2px solid #ff9800';
+      }
     };
 
     header.addEventListener('contextmenu', (e) => {
